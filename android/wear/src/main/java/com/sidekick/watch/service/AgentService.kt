@@ -12,6 +12,7 @@ import android.os.VibrationEffect
 import android.os.VibratorManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.wear.tiles.TileService
 import com.sidekick.watch.R
 import com.sidekick.watch.data.AgentRequestBus
 import com.sidekick.watch.data.AgentSettings
@@ -21,6 +22,7 @@ import com.sidekick.watch.data.OpenAIRepository
 import com.sidekick.watch.data.ResponseNotifier
 import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.data.SpacebotRepository
+import com.sidekick.watch.tile.SidekickTileService
 import com.sidekick.watch.viewmodel.ChatMessage
 import com.sidekick.watch.viewmodel.MessageRole
 import kotlinx.coroutines.CancellationException
@@ -72,6 +74,7 @@ class AgentService : Service() {
         AgentRequestBus.updateState {
             it.copy(conversationId = conversationId, isActive = true, streamingText = "", finalText = null, error = null)
         }
+        requestTileUpdate()
 
         scope.launch {
             try {
@@ -110,6 +113,7 @@ class AgentService : Service() {
         AgentRequestBus.updateState {
             it.copy(conversationId = conversationId, isActive = true, streamingText = "", finalText = null, error = null)
         }
+        requestTileUpdate()
 
         scope.launch {
             try {
@@ -163,6 +167,7 @@ class AgentService : Service() {
         }
         scope.launch {
             persistResponse(responseText, conversationId)
+            requestTileUpdate()
             releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -171,8 +176,13 @@ class AgentService : Service() {
 
     private fun onRequestFailed() {
         releaseWakeLock()
+        requestTileUpdate()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun requestTileUpdate() {
+        TileService.getUpdater(applicationContext).requestUpdate(SidekickTileService::class.java)
     }
 
     private suspend fun persistResponse(responseText: String, conversationId: String) {

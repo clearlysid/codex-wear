@@ -77,6 +77,7 @@ class ChatViewModel(
                     )
                 }
             }
+            _uiState.update { it.copy(isConversationStateLoaded = true) }
 
             AgentRequestBus.state.collect { requestState ->
                 val convId = requestState.conversationId ?: return@collect
@@ -136,7 +137,7 @@ class ChatViewModel(
 
     fun resetAll() {
         _uiState.update {
-            ChatUiState()
+            ChatUiState(isConversationStateLoaded = true)
         }
         viewModelScope.launch {
             settingsRepository.saveSettings(
@@ -453,6 +454,7 @@ data class ChatUiState(
     val isPolling: Boolean = false,
     val errorMessage: String? = null,
     val themeId: String = "default",
+    val isConversationStateLoaded: Boolean = false,
 ) {
     val selectedAgentFlavorName: String
         get() = AgentBackends.fromId(agentFlavorInput).displayName

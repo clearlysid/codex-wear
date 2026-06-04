@@ -8,6 +8,8 @@ import android.app.RemoteInput
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts.RequestPermission
@@ -42,6 +44,7 @@ import com.sidekick.watch.voice.SidekickVoiceInteractionSession
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
@@ -56,6 +59,7 @@ class MainActivity : ComponentActivity() {
     private var requestedHomePage by mutableStateOf(false)
     private var requestedConversationPageId by mutableStateOf<String?>(null)
     private var requestedKeyboardLaunch by mutableStateOf(false)
+    private var requestedVoiceLaunch by mutableStateOf(false)
     private var shouldCreateConversationAfterComposer: Boolean = false
     private var isVoiceListening by mutableStateOf(false)
     private var voiceRmsLevel by mutableStateOf(0f)
@@ -63,6 +67,8 @@ class MainActivity : ComponentActivity() {
     private var voiceReady by mutableStateOf(false)
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private var voiceRetryCount = 0
+    private var pendingLaunchIntent: Intent? = null
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) { voiceReady = true }
@@ -83,12 +89,23 @@ class MainActivity : ComponentActivity() {
                 ?.firstOrNull()?.trim().orEmpty()
             isVoiceListening = false
             voicePartialText = ""
+            voiceRetryCount = 0
             if (text.isNotEmpty()) startFreshConversationFromInput(text)
         }
 
         override fun onError(error: Int) {
-            isVoiceListening = false
-            voicePartialText = ""
+            Log.w(TAG, "Speech recognition failed: ${speechErrorName(error)}")
+            if (voiceRetryCount < MAX_VOICE_RETRIES && shouldRetryVoice(error)) {
+                voiceRetryCount += 1
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+                speechRecognizer = null
+                window.decorView.postDelayed({ startVoiceRecognition() }, VOICE_RETRY_DELAY_MS)
+            } else {
+                isVoiceListening = false
+                voicePartialText = ""
+                Toast.makeText(this@MainActivity, "Mic failed: ${speechErrorName(error)}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -113,12 +130,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleLaunchIntent(intent)
 
         setContent {
             val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
             val pagerState = rememberPagerState(initialPage = HOME_PAGE, pageCount = { PAGE_COUNT })
             val homeNavController = rememberNavController()
+
+            LaunchedEffect(uiState.isConversationStateLoaded) {
+                if (uiState.isConversationStateLoaded) {
+                    val queuedIntent = pendingLaunchIntent
+                    pendingLaunchIntent = null
+                    handleLaunchIntent(queuedIntent ?: intent)
+                }
+            }
 
             LaunchedEffect(requestedHomePage) {
                 if (requestedHomePage) {
@@ -141,6 +165,15 @@ class MainActivity : ComponentActivity() {
                     shouldCreateConversationAfterComposer = true
                     launchRemoteTextInput()
                     requestedKeyboardLaunch = false
+                }
+            }
+
+            LaunchedEffect(requestedVoiceLaunch) {
+                if (requestedVoiceLaunch) {
+                    delay(VOICE_LAUNCH_DELAY_MS)
+                    voiceRetryCount = 0
+                    startVoiceRecognitionWithPermission()
+                    requestedVoiceLaunch = false
                 }
             }
 
@@ -243,7 +276,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleLaunchIntent(intent)
+        if (viewModel.uiState.value.isConversationStateLoaded) {
+            handleLaunchIntent(intent)
+        } else {
+            pendingLaunchIntent = Intent(intent)
+        }
     }
 
     override fun onDestroy() {
@@ -263,11 +300,21 @@ class MainActivity : ComponentActivity() {
                 return
             }
             val inputMode = intent.getStringExtra(SidekickTileService.EXTRA_INPUT_MODE) ?: "voice"
-            if (inputMode == "keyboard") {
-                requestedHomePage = true
-                requestedKeyboardLaunch = true
-            } else {
-                startVoiceRecognitionWithPermission()
+            when (inputMode) {
+                "keyboard" -> {
+                    requestedHomePage = true
+                    requestedKeyboardLaunch = true
+                }
+                "chats" -> requestedHomePage = true
+                "activity" -> {
+                    val conversationId = intent.getStringExtra(SidekickTileService.EXTRA_CONVERSATION_ID)
+                    if (conversationId.isNullOrBlank()) {
+                        requestedHomePage = true
+                    } else {
+                        requestedConversationPageId = conversationId
+                    }
+                }
+                else -> requestedVoiceLaunch = true
             }
         }
     }
@@ -291,6 +338,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startVoiceRecognition() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            Toast.makeText(this, "Speech recognizer unavailable", Toast.LENGTH_SHORT).show()
+            Log.w(TAG, "Speech recognizer unavailable")
+            return
+        }
         speechRecognizer?.destroy()
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
             setRecognitionListener(recognitionListener)
@@ -323,5 +375,37 @@ class MainActivity : ComponentActivity() {
         const val HOME_CONVERSATION_ROUTE = "home/conversation"
         const val HOME_IMAGE_ROUTE = "home/image"
         const val HOME_CONVERSATIONS_PAGE_INCREMENT = 5
+        const val TAG = "SidekickVoice"
+        const val VOICE_LAUNCH_DELAY_MS = 250L
+        const val VOICE_RETRY_DELAY_MS = 300L
+        const val MAX_VOICE_RETRIES = 1
     }
 }
+
+private fun shouldRetryVoice(error: Int): Boolean =
+    error in setOf(
+        SpeechRecognizer.ERROR_CLIENT,
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
+        SpeechRecognizer.ERROR_SERVER,
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED,
+    )
+
+private fun speechErrorName(error: Int): String =
+    when (error) {
+        SpeechRecognizer.ERROR_AUDIO -> "audio"
+        SpeechRecognizer.ERROR_CLIENT -> "client"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "permission"
+        SpeechRecognizer.ERROR_NETWORK -> "network"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network timeout"
+        SpeechRecognizer.ERROR_NO_MATCH -> "no match"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "busy"
+        SpeechRecognizer.ERROR_SERVER -> "server"
+        SpeechRecognizer.ERROR_SERVER_DISCONNECTED -> "server disconnected"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "speech timeout"
+        SpeechRecognizer.ERROR_TOO_MANY_REQUESTS -> "too many requests"
+        SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> "language not supported"
+        SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> "language unavailable"
+        SpeechRecognizer.ERROR_CANNOT_CHECK_SUPPORT -> "cannot check support"
+        SpeechRecognizer.ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS -> "cannot listen to download events"
+        else -> "unknown $error"
+    }
