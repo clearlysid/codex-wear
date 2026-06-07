@@ -82,6 +82,9 @@ class OpenAIRepository(
                 if (!content.isNullOrEmpty()) {
                     trySend(content)
                 }
+                if (choice?.isNull("finish_reason") == false) {
+                    channel.close()
+                }
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {

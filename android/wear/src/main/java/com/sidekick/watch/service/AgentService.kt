@@ -20,8 +20,11 @@ import com.sidekick.watch.data.AgentSettings
 import com.sidekick.watch.data.HttpClientProvider
 import com.sidekick.watch.data.OpenAIMessage
 import com.sidekick.watch.data.OpenAIRepository
+import com.sidekick.watch.data.PersistedChatMessage
 import com.sidekick.watch.data.ResponseNotifier
+import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.tile.SidekickTileService
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -104,6 +107,7 @@ class AgentService : Service() {
 
                 val finalText = buffer.toString()
                 AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText) }
+                persistResponse(conversationId, finalText, null)
                 onRequestComplete(finalText, conversationId)
             } catch (e: CancellationException) {
                 throw e
@@ -155,6 +159,7 @@ class AgentService : Service() {
                 val generatedTitle = deferred.await()
                 if (!generatedTitle.isNullOrBlank()) {
                     AgentRequestBus.updateState { it.copy(conversationId = conversationId, generatedTitle = generatedTitle) }
+                    persistResponse(conversationId, null, generatedTitle)
                     requestTileUpdate()
                 }
             } finally {
@@ -187,6 +192,47 @@ class AgentService : Service() {
                 Log.w(TAG, "Title generation failed", e)
             }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
         }
+    }
+
+    private suspend fun persistResponse(
+        conversationId: String,
+        responseText: String?,
+        generatedTitle: String?,
+    ) {
+        val text = responseText?.takeIf { it.isNotBlank() }
+        val title = generatedTitle?.trim()?.takeIf { it.isNotBlank() }
+        if (text == null && title == null) return
+
+        val repository = SettingsRepository(applicationContext)
+        val current = repository.loadConversationState() ?: return
+        val messages = current.messagesByConversation[conversationId].orEmpty()
+        val updatedMessages =
+            if (text == null || messages.any { it.role == "BOT" && it.text == text }) {
+                messages
+            } else {
+                messages + PersistedChatMessage(
+                    id = UUID.randomUUID().toString(),
+                    role = "BOT",
+                    text = text,
+                )
+            }
+        val now = System.currentTimeMillis()
+        val updatedConversations = current.conversations.map { conversation ->
+            if (conversation.id != conversationId) {
+                conversation
+            } else {
+                conversation.copy(
+                    title = conversation.title ?: title,
+                    lastUpdatedEpochMs = if (text != null) now else conversation.lastUpdatedEpochMs,
+                )
+            }
+        }
+        repository.saveConversationState(
+            current.copy(
+                conversations = updatedConversations,
+                messagesByConversation = current.messagesByConversation + (conversationId to updatedMessages),
+            ),
+        )
     }
 
     private fun vibrateResponse() {
