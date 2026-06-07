@@ -94,7 +94,6 @@ class AgentService : Service() {
                 repo.sendMessageStreaming(baseUrl, authToken, model, messages, backendConversationId)
                     .collect { chunk ->
                         buffer.append(chunk)
-                        AgentRequestBus.emitChunk(chunk)
                         val now = SystemClock.elapsedRealtime()
                         if (now - lastStreamUpdateMs >= STREAM_UPDATE_INTERVAL_MS) {
                             lastStreamUpdateMs = now
