@@ -28,6 +28,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -73,7 +77,7 @@ fun ChatScreen(
                     onDragStart = { swipeOffset = 0f },
                     onHorizontalDrag = { _, dragAmount -> swipeOffset += dragAmount },
                     onDragEnd = {
-                        if (swipeOffset < -swipeThresholdPx) onOpenChats()
+                        if (swipeOffset > swipeThresholdPx) onOpenChats()
                         swipeOffset = 0f
                     },
                     onDragCancel = { swipeOffset = 0f },
@@ -141,7 +145,7 @@ fun ChatScreen(
                                     segments.forEach { segment ->
                                         when (segment) {
                                             is MessageSegment.Text -> Text(
-                                                text = segment.content,
+                                                text = remember(segment.content) { markdownInlineText(segment.content) },
                                                 style = MaterialTheme.typography.bodySmall,
                                             )
                                             is MessageSegment.Image -> AsyncImage(
@@ -191,3 +195,51 @@ fun ChatScreen(
         }
     }
 }
+
+private fun markdownInlineText(text: String) = buildAnnotatedString {
+    var index = 0
+    while (index < text.length) {
+        val boldStar = text.indexOf("**", index).takeIf { it >= 0 }
+        val boldUnderscore = text.indexOf("__", index).takeIf { it >= 0 }
+        val italicStar = text.indexOf("*", index).takeIf { it >= 0 }
+        val italicUnderscore = text.indexOf("_", index).takeIf { it >= 0 }
+        val next = listOfNotNull(
+            boldStar?.let { MarkdownMarker(it, "**", FontWeight.Bold, null) },
+            boldUnderscore?.let { MarkdownMarker(it, "__", FontWeight.Bold, null) },
+            italicStar?.let { MarkdownMarker(it, "*", null, FontStyle.Italic) },
+            italicUnderscore?.let { MarkdownMarker(it, "_", null, FontStyle.Italic) },
+        ).minByOrNull { it.index }
+
+        if (next == null) {
+            append(text.substring(index))
+            break
+        }
+
+        if (next.index > index) append(text.substring(index, next.index))
+        val contentStart = next.index + next.marker.length
+        val end = text.indexOf(next.marker, contentStart)
+        if (end < 0) {
+            append(next.marker)
+            index = contentStart
+            continue
+        }
+
+        val content = text.substring(contentStart, end)
+        pushStyle(
+            SpanStyle(
+                fontWeight = next.fontWeight,
+                fontStyle = next.fontStyle,
+            ),
+        )
+        append(content)
+        pop()
+        index = end + next.marker.length
+    }
+}
+
+private data class MarkdownMarker(
+    val index: Int,
+    val marker: String,
+    val fontWeight: FontWeight?,
+    val fontStyle: FontStyle?,
+)

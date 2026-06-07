@@ -215,6 +215,7 @@ class MainActivity : ComponentActivity() {
                                 composable(HOME_LIST_ROUTE) {
                                     HomeScreen(
                                         conversations = uiState.conversations,
+                                        activeConversationId = uiState.activeConversationId,
                                         onNewConversationWithKeyboard = {
                                             shouldCreateConversationAfterComposer = true
                                             launchRemoteTextInput()
@@ -273,20 +274,12 @@ class MainActivity : ComponentActivity() {
                                 model = uiState.modelInput,
                                 authToken = uiState.authTokenInput,
                                 voiceInputProviderId = uiState.voiceInputProviderId,
-                                sttBaseUrl = uiState.sttBaseUrlInput,
-                                sttModel = uiState.sttModelInput,
-                                sttLanguageCode = uiState.sttLanguageCodeInput,
-                                sttMode = uiState.sttModeInput,
                                 sttAuthToken = uiState.sttAuthTokenInput,
                                 onSaveAgentFlavor = viewModel::saveAgentFlavor,
                                 onSaveBaseUrl = viewModel::saveBaseUrl,
                                 onSaveModel = viewModel::saveModel,
                                 onSaveAuthToken = viewModel::saveAuthToken,
                                 onSaveVoiceInputProvider = viewModel::saveVoiceInputProvider,
-                                onSaveSttBaseUrl = viewModel::saveSttBaseUrl,
-                                onSaveSttModel = viewModel::saveSttModel,
-                                onSaveSttLanguageCode = viewModel::saveSttLanguageCode,
-                                onSaveSttMode = viewModel::saveSttMode,
                                 onSaveSttAuthToken = viewModel::saveSttAuthToken,
                                 onResetAll = viewModel::resetAll,
                             )

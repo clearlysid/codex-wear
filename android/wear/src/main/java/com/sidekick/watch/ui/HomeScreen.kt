@@ -1,10 +1,11 @@
 package com.sidekick.watch.ui
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Keyboard
@@ -17,15 +18,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Card
+import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
+import androidx.wear.compose.material3.IconButtonDefaults
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.SurfaceTransformation
@@ -41,6 +43,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun HomeScreen(
     conversations: List<ConversationSummary>,
+    activeConversationId: String?,
     onNewConversationWithKeyboard: () -> Unit,
     onNewConversationWithVoice: () -> Unit,
     onOpenConversation: (String) -> Unit,
@@ -85,31 +88,21 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Hello!",
-                            style = MaterialTheme.typography.titleSmall,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                }
-
-                item {
                     Row(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 6.dp)
+                                .padding(top = 2.dp, bottom = 4.dp)
                                 .transformedHeight(this, transformationSpec),
                         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         FilledIconButton(
                             onClick = onNewConversationWithKeyboard,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Keyboard,
@@ -118,6 +111,10 @@ fun HomeScreen(
                         }
                         FilledIconButton(
                             onClick = onNewConversationWithVoice,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Mic,
@@ -146,15 +143,27 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 transformation = SurfaceTransformation(transformationSpec),
                             ) {
-                                Text(
-                                    text = conversation.initialPrompt?.take(42)?.ifBlank { "New conversation" }
-                                        ?: "New conversation",
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Text(
-                                    text = formatLastUpdated(conversation.lastUpdatedEpochMs),
-                                    style = MaterialTheme.typography.bodyExtraSmall,
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = conversation.displayTitle(42),
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        Text(
+                                            text = formatLastUpdated(conversation.lastUpdatedEpochMs),
+                                            style = MaterialTheme.typography.bodyExtraSmall,
+                                        )
+                                    }
+                                    if (conversation.id == activeConversationId) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

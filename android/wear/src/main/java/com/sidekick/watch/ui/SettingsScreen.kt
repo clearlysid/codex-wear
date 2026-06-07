@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -53,20 +54,12 @@ fun SettingsScreen(
     model: String,
     authToken: String,
     voiceInputProviderId: String,
-    sttBaseUrl: String,
-    sttModel: String,
-    sttLanguageCode: String,
-    sttMode: String,
     sttAuthToken: String,
     onSaveAgentFlavor: (String) -> Unit,
     onSaveBaseUrl: (String) -> Unit,
     onSaveModel: (String) -> Unit,
     onSaveAuthToken: (String) -> Unit,
     onSaveVoiceInputProvider: (String) -> Unit,
-    onSaveSttBaseUrl: (String) -> Unit,
-    onSaveSttModel: (String) -> Unit,
-    onSaveSttLanguageCode: (String) -> Unit,
-    onSaveSttMode: (String) -> Unit,
     onSaveSttAuthToken: (String) -> Unit,
     onResetAll: () -> Unit,
 ) {
@@ -111,7 +104,7 @@ fun SettingsScreen(
                         Text("Agent Flavour", style = MaterialTheme.typography.labelSmall)
                         Text(
                             text = selectedAgentFlavorName,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodyExtraSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -127,7 +120,7 @@ fun SettingsScreen(
                         Text("Base URL", style = MaterialTheme.typography.labelSmall)
                         Text(
                             text = baseUrl.ifBlank { "https://..." },
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodyExtraSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -143,7 +136,7 @@ fun SettingsScreen(
                         Text("Model", style = MaterialTheme.typography.labelSmall)
                         Text(
                             text = model.ifBlank { "default" },
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodyExtraSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -159,7 +152,7 @@ fun SettingsScreen(
                         Text("Auth Token", style = MaterialTheme.typography.labelSmall)
                         Text(
                             text = maskToken(authToken),
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodyExtraSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -182,7 +175,7 @@ fun SettingsScreen(
                         Text("Voice Input", style = MaterialTheme.typography.labelSmall)
                         Text(
                             text = voiceProviderName(voiceInputProviderId),
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodyExtraSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -192,61 +185,12 @@ fun SettingsScreen(
                 if (voiceInputProviderId == VoiceInputProviders.SARVAM) {
                     item {
                         Card(
-                            onClick = { dialog = SettingDialog.SttBaseUrl },
-                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                            transformation = SurfaceTransformation(transformationSpec),
-                        ) {
-                            Text("STT URL", style = MaterialTheme.typography.labelSmall)
-                            Text(
-                                text = sttBaseUrl.ifBlank { VoiceInputProviders.SARVAM_BASE_URL },
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-
-                    item {
-                        Card(
-                            onClick = { dialog = SettingDialog.SttModel },
-                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                            transformation = SurfaceTransformation(transformationSpec),
-                        ) {
-                            Text("STT Model", style = MaterialTheme.typography.labelSmall)
-                            Text(sttModel.ifBlank { "saaras:v3" }, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-
-                    item {
-                        Card(
-                            onClick = { dialog = SettingDialog.SttLanguage },
-                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                            transformation = SurfaceTransformation(transformationSpec),
-                        ) {
-                            Text("STT Lang", style = MaterialTheme.typography.labelSmall)
-                            Text(sttLanguageCode.ifBlank { "unknown" }, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-
-                    item {
-                        Card(
-                            onClick = { dialog = SettingDialog.SttMode },
-                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                            transformation = SurfaceTransformation(transformationSpec),
-                        ) {
-                            Text("STT Mode", style = MaterialTheme.typography.labelSmall)
-                            Text(sttMode.ifBlank { "transcribe" }, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-
-                    item {
-                        Card(
                             onClick = { dialog = SettingDialog.SttAuthToken },
                             modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
                             transformation = SurfaceTransformation(transformationSpec),
                         ) {
                             Text("STT Token", style = MaterialTheme.typography.labelSmall)
-                            Text(maskToken(sttAuthToken), style = MaterialTheme.typography.labelSmall)
+                            Text(maskToken(sttAuthToken), style = MaterialTheme.typography.bodyExtraSmall)
                         }
                     }
                 }
@@ -342,62 +286,6 @@ fun SettingsScreen(
                 )
             }
 
-            SettingDialog.SttBaseUrl -> {
-                TextSettingDialog(
-                    title = "STT URL",
-                    initialValue = sttBaseUrl,
-                    keyboardType = KeyboardType.Uri,
-                    placeholder = VoiceInputProviders.SARVAM_BASE_URL,
-                    onCancel = { dialog = null },
-                    onSave = { value ->
-                        onSaveSttBaseUrl(value)
-                        dialog = null
-                    },
-                )
-            }
-
-            SettingDialog.SttModel -> {
-                TextSettingDialog(
-                    title = "STT Model",
-                    initialValue = sttModel,
-                    keyboardType = KeyboardType.Text,
-                    placeholder = "saaras:v3",
-                    onCancel = { dialog = null },
-                    onSave = { value ->
-                        onSaveSttModel(value)
-                        dialog = null
-                    },
-                )
-            }
-
-            SettingDialog.SttLanguage -> {
-                TextSettingDialog(
-                    title = "STT Lang",
-                    initialValue = sttLanguageCode,
-                    keyboardType = KeyboardType.Text,
-                    placeholder = "unknown",
-                    onCancel = { dialog = null },
-                    onSave = { value ->
-                        onSaveSttLanguageCode(value)
-                        dialog = null
-                    },
-                )
-            }
-
-            SettingDialog.SttMode -> {
-                TextSettingDialog(
-                    title = "STT Mode",
-                    initialValue = sttMode,
-                    keyboardType = KeyboardType.Text,
-                    placeholder = "transcribe",
-                    onCancel = { dialog = null },
-                    onSave = { value ->
-                        onSaveSttMode(value)
-                        dialog = null
-                    },
-                )
-            }
-
             SettingDialog.SttAuthToken -> {
                 TextSettingDialog(
                     title = "STT Token",
@@ -450,7 +338,8 @@ private fun SectionTitle(title: String, modifier: Modifier = Modifier) {
         text = title,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(start = 10.dp, top = 10.dp, bottom = 2.dp),
+        textAlign = TextAlign.Center,
+        modifier = modifier.padding(top = 10.dp, bottom = 2.dp),
     )
 }
 
@@ -656,10 +545,6 @@ private enum class SettingDialog {
     Model,
     AuthToken,
     VoiceInputProvider,
-    SttBaseUrl,
-    SttModel,
-    SttLanguage,
-    SttMode,
     SttAuthToken,
     ResetAll,
 }

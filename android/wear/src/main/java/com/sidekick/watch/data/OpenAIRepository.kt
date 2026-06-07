@@ -136,6 +136,28 @@ class OpenAIRepository(
         }
     }
 
+    suspend fun generateConversationTitle(
+        baseUrl: String,
+        authToken: String,
+        model: String,
+        userRequest: String,
+    ): Result<String> =
+        sendMessage(
+            baseUrl = baseUrl,
+            authToken = authToken,
+            model = model,
+            messages = listOf(
+                OpenAIMessage(
+                    role = "system",
+                    content = "Create a concise 3-5 word chat title from the user request. Return title only.",
+                ),
+                OpenAIMessage(
+                    role = "user",
+                    content = userRequest,
+                ),
+            ),
+        ).map { it.trim() }
+
     companion object {
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }

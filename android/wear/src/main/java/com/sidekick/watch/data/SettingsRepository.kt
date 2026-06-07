@@ -149,6 +149,7 @@ data class PersistedConversationState(
 @Serializable
 data class PersistedConversationSummary(
     val id: String,
+    val title: String? = null,
     val initialPrompt: String? = null,
     val lastUpdatedEpochMs: Long = 0L,
 )

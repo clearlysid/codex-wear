@@ -9,6 +9,8 @@ import com.sidekick.watch.BuildConfig
 import com.sidekick.watch.data.AgentBackends
 import com.sidekick.watch.data.AgentRequestBus
 import com.sidekick.watch.data.AgentSettings
+import com.sidekick.watch.data.HttpClientProvider
+import com.sidekick.watch.data.OpenAIRepository
 import com.sidekick.watch.data.PersistedChatMessage
 import com.sidekick.watch.data.PersistedConversationState
 import com.sidekick.watch.data.PersistedConversationSummary
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -89,6 +92,7 @@ class ChatViewModel(
                         requestState.error != null -> state.copy(
                             isPolling = false,
                             isSending = false,
+                            activeConversationId = null,
                             errorMessage = requestState.error,
                         )
                         requestState.finalText != null -> {
@@ -100,6 +104,7 @@ class ChatViewModel(
                                 conversations = updateConversationMeta(state.conversations, convId, requestState.finalText, false),
                                 isPolling = false,
                                 isSending = false,
+                                activeConversationId = null,
                             )
                         }
                         requestState.isActive && requestState.streamingText.isNotEmpty() -> {
@@ -108,6 +113,7 @@ class ChatViewModel(
                             val streamingMsg = ChatMessage(id = STREAMING_MESSAGE_ID, role = MessageRole.BOT, text = requestState.streamingText)
                             state.copy(
                                 messagesByConversation = state.messagesByConversation + (convId to (withoutStreaming + streamingMsg)),
+                                activeConversationId = convId,
                             )
                         }
                         else -> state
@@ -184,6 +190,7 @@ class ChatViewModel(
         val newConversation =
             ConversationSummary(
                 id = "conversation-${UUID.randomUUID().toString().take(8)}",
+                title = null,
                 initialPrompt = null,
                 lastUpdatedEpochMs = System.currentTimeMillis(),
             )
@@ -338,6 +345,10 @@ class ChatViewModel(
                 it.copy(backendConversationIds = it.backendConversationIds + (localConversationId to backendConversationId))
             }
         }
+        val shouldGenerateTitle =
+            state.conversations.firstOrNull { it.id == localConversationId }?.let {
+                it.title.isNullOrBlank() && it.initialPrompt.isNullOrBlank()
+            } == true
 
         val userMessage = ChatMessage(role = MessageRole.USER, text = trimmed)
         _uiState.update {
@@ -352,14 +363,53 @@ class ChatViewModel(
                         allowInitialPromptUpdate = true,
                     ),
                 isSending = true,
+                activeConversationId = localConversationId,
                 errorMessage = null,
             )
         }
         persistConversationState()
+        if (shouldGenerateTitle) {
+            generateTitle(localConversationId, trimmed, settings)
+        }
 
         sendViaOpenAI(localConversationId, backendConversationId, settings)
         scheduleRequestTimeout()
         return true
+    }
+
+    private fun generateTitle(conversationId: String, firstUserRequest: String, settings: AgentSettings) {
+        viewModelScope.launch {
+            runCatching {
+                withTimeout(TITLE_REQUEST_TIMEOUT_MS) {
+                    OpenAIRepository(HttpClientProvider.client)
+                        .generateConversationTitle(
+                            baseUrl = settings.baseUrl,
+                            authToken = settings.authToken,
+                            model = settings.model,
+                            userRequest = firstUserRequest,
+                        )
+                        .getOrThrow()
+                }
+            }
+                .onSuccess { generatedTitle ->
+                    if (generatedTitle.isBlank()) return@onSuccess
+                    _uiState.update { state ->
+                        state.copy(
+                            conversations = state.conversations.map { conversation ->
+                                if (conversation.id == conversationId && conversation.title.isNullOrBlank()) {
+                                    conversation.copy(title = generatedTitle.trim())
+                                } else {
+                                    conversation
+                                }
+                            },
+                        )
+                    }
+                    persistConversationState()
+                }
+                .onFailure { e ->
+                    Log.w(logTag, "Title generation failed", e)
+                }
+        }
     }
 
     private fun scheduleRequestTimeout() {
@@ -370,6 +420,7 @@ class ChatViewModel(
                 it.copy(
                     isSending = false,
                     isPolling = false,
+                    activeConversationId = null,
                     errorMessage = "Agent timed out",
                 )
             }
@@ -379,7 +430,7 @@ class ChatViewModel(
     }
 
     private fun sendViaOpenAI(localConversationId: String, backendConversationId: String, settings: AgentSettings) {
-        _uiState.update { it.copy(isSending = false, isPolling = true) }
+        _uiState.update { it.copy(isSending = false, isPolling = true, activeConversationId = localConversationId) }
 
         val history = _uiState.value.messagesByConversation[localConversationId].orEmpty()
         val messagesJson = serializeMessages(history)
@@ -451,6 +502,7 @@ class ChatViewModel(
     companion object {
         private const val STREAMING_MESSAGE_ID = "__streaming__"
         private const val REQUEST_TIMEOUT_MS = 90_000L
+        private const val TITLE_REQUEST_TIMEOUT_MS = 10_000L
     }
 }
 
@@ -468,6 +520,7 @@ private fun ChatUiState.toPersistedConversationState(): PersistedConversationSta
 private fun ConversationSummary.toPersistedConversationSummary(): PersistedConversationSummary =
     PersistedConversationSummary(
         id = id,
+        title = title,
         initialPrompt = initialPrompt,
         lastUpdatedEpochMs = lastUpdatedEpochMs,
     )
@@ -475,6 +528,7 @@ private fun ConversationSummary.toPersistedConversationSummary(): PersistedConve
 private fun PersistedConversationSummary.toConversationSummary(): ConversationSummary =
     ConversationSummary(
         id = id,
+        title = title,
         initialPrompt = initialPrompt,
         lastUpdatedEpochMs = lastUpdatedEpochMs,
     )
@@ -513,6 +567,7 @@ data class ChatUiState(
     val sttModeInput: String = "",
     val isSending: Boolean = false,
     val isPolling: Boolean = false,
+    val activeConversationId: String? = null,
     val errorMessage: String? = null,
     val isConversationStateLoaded: Boolean = false,
 ) {
@@ -526,7 +581,7 @@ data class ChatUiState(
         get() = conversations.firstOrNull { it.id == selectedConversationId }
 
     val currentConversationTitle: String
-        get() = currentConversation?.initialPrompt?.take(40)?.ifBlank { "New conversation" } ?: "Conversation"
+        get() = currentConversation?.displayTitle(40) ?: "Conversation"
 
     val messages: List<ChatMessage>
         get() = selectedConversationId?.let { messagesByConversation[it].orEmpty() }.orEmpty()
@@ -534,9 +589,15 @@ data class ChatUiState(
 
 data class ConversationSummary(
     val id: String,
+    val title: String?,
     val initialPrompt: String?,
     val lastUpdatedEpochMs: Long,
-)
+) {
+    fun displayTitle(maxLength: Int): String =
+        title?.takeIf { it.isNotBlank() }
+            ?: initialPrompt?.take(maxLength)?.takeIf { it.isNotBlank() }
+            ?: "New conversation"
+}
 
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
