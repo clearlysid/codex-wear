@@ -105,6 +105,9 @@ fun ChatScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
+                                    .padding(3.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(KeyboardActionGreen)
                                     .clickable(onClick = onOpenTextInput),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -112,6 +115,7 @@ fun ChatScreen(
                                     imageVector = Icons.Filled.Keyboard,
                                     contentDescription = "Text reply",
                                     modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
                             Box(
@@ -125,6 +129,9 @@ fun ChatScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight()
+                                    .padding(3.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(MicActionPeach)
                                     .clickable(onClick = onOpenVoiceInput),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -132,6 +139,7 @@ fun ChatScreen(
                                     imageVector = Icons.Filled.Mic,
                                     contentDescription = "Voice reply",
                                     modifier = Modifier.size(20.dp),
+                                    tint = MicActionContent,
                                 )
                             }
                         }

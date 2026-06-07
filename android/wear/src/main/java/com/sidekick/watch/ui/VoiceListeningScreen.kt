@@ -97,12 +97,12 @@ fun VoiceListeningScreen(
     val warmupColor2 = Color(0xFF8A8A8A)
 
     val color1 by animateColorAsState(
-        targetValue = if (isReady) MaterialTheme.colorScheme.primary else warmupColor1,
+        targetValue = if (isReady) MicActionPeach else warmupColor1,
         animationSpec = tween(600),
         label = "color1",
     )
     val color2 by animateColorAsState(
-        targetValue = if (isReady) MaterialTheme.colorScheme.tertiary else warmupColor2,
+        targetValue = if (isReady) MicActionOrange else warmupColor2,
         animationSpec = tween(600),
         label = "color2",
     )

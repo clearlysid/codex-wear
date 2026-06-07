@@ -100,7 +100,7 @@ fun HomeScreen(
                         FilledIconButton(
                             onClick = onNewConversationWithKeyboard,
                             colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                containerColor = KeyboardActionGreen,
                                 contentColor = MaterialTheme.colorScheme.onSurface,
                             ),
                         ) {
@@ -112,8 +112,8 @@ fun HomeScreen(
                         FilledIconButton(
                             onClick = onNewConversationWithVoice,
                             colors = IconButtonDefaults.filledIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                containerColor = MicActionPeach,
+                                contentColor = MicActionContent,
                             ),
                         ) {
                             Icon(
