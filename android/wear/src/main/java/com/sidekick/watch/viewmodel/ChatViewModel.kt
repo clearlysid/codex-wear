@@ -16,8 +16,6 @@ import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.data.VoiceInputProviders
 import com.sidekick.watch.service.AgentService
 import java.util.UUID
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,8 +40,6 @@ class ChatViewModel(
             ),
         )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
-
-    private var requestTimeoutJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -117,8 +113,6 @@ class ChatViewModel(
                     }
                 }
                 if (requestState.finalText != null || requestState.error != null) {
-                    requestTimeoutJob?.cancel()
-                    requestTimeoutJob = null
                     persistConversationState()
                     AgentRequestBus.reset()
                 }
@@ -372,25 +366,7 @@ class ChatViewModel(
             settings = settings,
             titleUserRequest = if (shouldGenerateTitle) trimmed else null,
         )
-        scheduleRequestTimeout()
         return true
-    }
-
-    private fun scheduleRequestTimeout() {
-        requestTimeoutJob?.cancel()
-        requestTimeoutJob = viewModelScope.launch {
-            delay(REQUEST_TIMEOUT_MS)
-            _uiState.update {
-                it.copy(
-                    isSending = false,
-                    isPolling = false,
-                    activeConversationId = null,
-                    errorMessage = "Agent timed out",
-                )
-            }
-            AgentRequestBus.reset()
-            persistConversationState()
-        }
     }
 
     private fun sendViaOpenAI(
@@ -471,7 +447,6 @@ class ChatViewModel(
 
     companion object {
         private const val STREAMING_MESSAGE_ID = "__streaming__"
-        private const val REQUEST_TIMEOUT_MS = 90_000L
     }
 }
 
