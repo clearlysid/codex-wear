@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import android.util.Log
@@ -88,12 +89,17 @@ class AgentService : Service() {
                 val messages = deserializeMessages(messagesJson)
                 val repo = OpenAIRepository(HttpClientProvider.client)
                 val buffer = StringBuilder()
+                var lastStreamUpdateMs = 0L
 
                 repo.sendMessageStreaming(baseUrl, authToken, model, messages, backendConversationId)
                     .collect { chunk ->
                         buffer.append(chunk)
                         AgentRequestBus.emitChunk(chunk)
-                        AgentRequestBus.updateState { it.copy(streamingText = buffer.toString()) }
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastStreamUpdateMs >= STREAM_UPDATE_INTERVAL_MS) {
+                            lastStreamUpdateMs = now
+                            AgentRequestBus.updateState { it.copy(streamingText = buffer.toString()) }
+                        }
                     }
 
                 val finalText = buffer.toString()
@@ -219,6 +225,7 @@ class AgentService : Service() {
         private const val EXTRA_MESSAGES_JSON = "messages_json"
         private const val EXTRA_TITLE_USER_REQUEST = "title_user_request"
         private const val TITLE_REQUEST_TIMEOUT_MS = 10_000L
+        private const val STREAM_UPDATE_INTERVAL_MS = 150L
 
         fun startOpenAI(
             context: Context,
