@@ -548,7 +548,7 @@ class MainActivity : ComponentActivity() {
     private fun voiceStatusText(): String =
         when (voicePhase) {
             VoiceInputPhase.Idle -> ""
-            VoiceInputPhase.Recording -> if (voiceReady) "Listening" else "Connecting"
+            VoiceInputPhase.Recording -> if (voiceReady) "How can I help?" else "Connecting"
             VoiceInputPhase.Transcribing -> "Transcribing"
             VoiceInputPhase.Preview -> "Preview"
             VoiceInputPhase.Error -> "Voice failed"
