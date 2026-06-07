@@ -30,8 +30,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.wear.input.RemoteInputIntentHelper
+import com.sidekick.watch.data.AgentSettings
+import com.sidekick.watch.data.HttpClientProvider
+import com.sidekick.watch.data.SarvamRealtimeTranscriber
 import com.sidekick.watch.data.SettingsRepository
+import com.sidekick.watch.data.TranscriptionEvent
+import com.sidekick.watch.data.VoiceInputProviders
 import com.sidekick.watch.presentation.theme.SidekickTheme
 import com.sidekick.watch.tile.SidekickTileService
 import com.sidekick.watch.ui.ChatScreen
@@ -44,7 +50,9 @@ import com.sidekick.watch.voice.SidekickVoiceInteractionSession
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.Locale
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val settingsRepository by lazy { SettingsRepository(applicationContext) }
@@ -61,12 +69,17 @@ class MainActivity : ComponentActivity() {
     private var requestedKeyboardLaunch by mutableStateOf(false)
     private var requestedVoiceLaunch by mutableStateOf(false)
     private var shouldCreateConversationAfterComposer: Boolean = false
-    private var isVoiceListening by mutableStateOf(false)
+    private var voicePhase by mutableStateOf(VoiceInputPhase.Idle)
     private var voiceRmsLevel by mutableStateOf(0f)
     private var voicePartialText by mutableStateOf("")
     private var voiceReady by mutableStateOf(false)
+    private var latestSettings: AgentSettings = AgentSettings()
 
     private var speechRecognizer: SpeechRecognizer? = null
+    private val sarvamTranscriber by lazy {
+        SarvamRealtimeTranscriber(HttpClientProvider.client, lifecycleScope)
+    }
+    private var voiceTimeoutJob: Job? = null
     private var voiceRetryCount = 0
     private var pendingLaunchIntent: Intent? = null
 
@@ -87,10 +100,9 @@ class MainActivity : ComponentActivity() {
         override fun onResults(results: Bundle?) {
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()?.trim().orEmpty()
-            isVoiceListening = false
-            voicePartialText = ""
+            voicePhase = VoiceInputPhase.Preview
+            voicePartialText = text
             voiceRetryCount = 0
-            if (text.isNotEmpty()) startFreshConversationFromInput(text)
         }
 
         override fun onError(error: Int) {
@@ -102,7 +114,7 @@ class MainActivity : ComponentActivity() {
                 speechRecognizer = null
                 window.decorView.postDelayed({ startVoiceRecognition() }, VOICE_RETRY_DELAY_MS)
             } else {
-                isVoiceListening = false
+                voicePhase = VoiceInputPhase.Error
                 voicePartialText = ""
                 Toast.makeText(this@MainActivity, "Mic failed: ${speechErrorName(error)}", Toast.LENGTH_SHORT).show()
             }
@@ -110,7 +122,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val audioPermissionLauncher = registerForActivityResult(RequestPermission()) { granted ->
-        if (granted) startVoiceRecognition()
+        if (granted) startVoiceInput()
     }
 
     private val textInputLauncher =
@@ -133,6 +145,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+            latestSettings = uiState.savedSettings
             val pagerState = rememberPagerState(initialPage = HOME_PAGE, pageCount = { PAGE_COUNT })
             val homeNavController = rememberNavController()
 
@@ -172,7 +185,7 @@ class MainActivity : ComponentActivity() {
                 if (requestedVoiceLaunch) {
                     delay(VOICE_LAUNCH_DELAY_MS)
                     voiceRetryCount = 0
-                    startVoiceRecognitionWithPermission()
+                    startVoiceInputWithPermission()
                     requestedVoiceLaunch = false
                 }
             }
@@ -204,7 +217,7 @@ class MainActivity : ComponentActivity() {
                                             shouldCreateConversationAfterComposer = true
                                             launchRemoteTextInput()
                                         },
-                                        onNewConversationWithVoice = ::startVoiceRecognitionWithPermission,
+                                        onNewConversationWithVoice = ::startVoiceInputWithPermission,
                                         onOpenConversation = { conversationId ->
                                             viewModel.openConversation(conversationId)
                                             homeNavController.navigate("$HOME_CONVERSATION_ROUTE/$conversationId")
@@ -231,6 +244,12 @@ class MainActivity : ComponentActivity() {
                                             val encoded = URLEncoder.encode(url, "UTF-8")
                                             homeNavController.navigate("$HOME_IMAGE_ROUTE/$encoded")
                                         },
+                                        onOpenChats = {
+                                            homeNavController.navigate(HOME_LIST_ROUTE) {
+                                                popUpTo(HOME_LIST_ROUTE) { inclusive = false }
+                                                launchSingleTop = true
+                                            }
+                                        },
                                     )
                                 }
                                 composable(
@@ -251,21 +270,39 @@ class MainActivity : ComponentActivity() {
                                 baseUrl = uiState.baseUrlInput,
                                 model = uiState.modelInput,
                                 authToken = uiState.authTokenInput,
+                                voiceInputProviderId = uiState.voiceInputProviderId,
+                                sttBaseUrl = uiState.sttBaseUrlInput,
+                                sttModel = uiState.sttModelInput,
+                                sttLanguageCode = uiState.sttLanguageCodeInput,
+                                sttMode = uiState.sttModeInput,
+                                sttAuthToken = uiState.sttAuthTokenInput,
                                 themeId = uiState.themeId,
                                 onSaveAgentFlavor = viewModel::saveAgentFlavor,
                                 onSaveBaseUrl = viewModel::saveBaseUrl,
                                 onSaveModel = viewModel::saveModel,
                                 onSaveAuthToken = viewModel::saveAuthToken,
+                                onSaveVoiceInputProvider = viewModel::saveVoiceInputProvider,
+                                onSaveSttBaseUrl = viewModel::saveSttBaseUrl,
+                                onSaveSttModel = viewModel::saveSttModel,
+                                onSaveSttLanguageCode = viewModel::saveSttLanguageCode,
+                                onSaveSttMode = viewModel::saveSttMode,
+                                onSaveSttAuthToken = viewModel::saveSttAuthToken,
                                 onSaveTheme = viewModel::saveTheme,
                                 onResetAll = viewModel::resetAll,
                             )
                         }
                     }
-                    if (isVoiceListening) {
+                    if (voicePhase != VoiceInputPhase.Idle) {
                         VoiceListeningScreen(
                             rmsLevel = voiceRmsLevel,
                             partialText = voicePartialText,
                             isReady = voiceReady,
+                            statusText = voiceStatusText(),
+                            canSend = voicePartialText.isNotBlank() && voicePhase != VoiceInputPhase.Recording,
+                            showStop = voicePhase == VoiceInputPhase.Recording,
+                            onStop = ::stopVoiceCapture,
+                            onCancel = ::cancelVoiceCapture,
+                            onSend = ::sendVoicePreview,
                         )
                     }
                 }
@@ -284,6 +321,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        cancelVoiceCapture()
         speechRecognizer?.destroy()
         speechRecognizer = null
         super.onDestroy()
@@ -314,7 +352,10 @@ class MainActivity : ComponentActivity() {
                         requestedConversationPageId = conversationId
                     }
                 }
-                else -> requestedVoiceLaunch = true
+                else -> {
+                    requestedHomePage = true
+                    requestedVoiceLaunch = true
+                }
             }
         }
     }
@@ -329,11 +370,49 @@ class MainActivity : ComponentActivity() {
         textInputLauncher.launch(intent)
     }
 
-    private fun startVoiceRecognitionWithPermission() {
+    private fun startVoiceInputWithPermission() {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            startVoiceRecognition()
+            startVoiceInput()
         } else {
             audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun startVoiceInput() {
+        if (latestSettings.voiceInputProviderId == VoiceInputProviders.ANDROID_RECOGNIZER) {
+            startVoiceRecognition()
+        } else {
+            startSarvamTranscription()
+        }
+    }
+
+    private fun startSarvamTranscription() {
+        resetVoiceUi()
+        voicePhase = VoiceInputPhase.Recording
+        voiceReady = false
+        sarvamTranscriber.start(latestSettings) { event ->
+            lifecycleScope.launch {
+                when (event) {
+                    TranscriptionEvent.Connected -> voiceReady = true
+                    is TranscriptionEvent.Level -> voiceRmsLevel = event.rms
+                    is TranscriptionEvent.Partial -> {
+                        voicePartialText = event.text
+                    }
+                    is TranscriptionEvent.Final -> {
+                        voicePartialText = event.text
+                        voicePhase = VoiceInputPhase.Preview
+                    }
+                    is TranscriptionEvent.Error -> {
+                        voicePhase = VoiceInputPhase.Error
+                        voicePartialText = event.message
+                    }
+                }
+            }
+        }
+        voiceTimeoutJob?.cancel()
+        voiceTimeoutJob = lifecycleScope.launch {
+            delay(VOICE_HARD_CAP_MS)
+            stopVoiceCapture()
         }
     }
 
@@ -356,15 +435,81 @@ class MainActivity : ComponentActivity() {
         voiceRmsLevel = 0f
         voicePartialText = ""
         voiceReady = false
-        isVoiceListening = true
+        voicePhase = VoiceInputPhase.Recording
+        voiceTimeoutJob?.cancel()
+        voiceTimeoutJob = lifecycleScope.launch {
+            delay(VOICE_HARD_CAP_MS)
+            speechRecognizer?.stopListening()
+        }
         speechRecognizer?.startListening(intent)
     }
 
-    private fun startFreshConversationFromInput(inputText: String) {
+    private fun stopVoiceCapture() {
+        voiceTimeoutJob?.cancel()
+        voiceTimeoutJob = null
+        if (latestSettings.voiceInputProviderId == VoiceInputProviders.ANDROID_RECOGNIZER) {
+            speechRecognizer?.stopListening()
+        } else {
+            voicePhase = VoiceInputPhase.Transcribing
+            sarvamTranscriber.stop(flush = true)
+        }
+    }
+
+    private fun cancelVoiceCapture() {
+        voiceTimeoutJob?.cancel()
+        voiceTimeoutJob = null
+        speechRecognizer?.cancel()
+        sarvamTranscriber.stop()
+        resetVoiceUi()
+    }
+
+    private fun sendVoicePreview() {
+        val text = voicePartialText.trim()
+        if (text.isEmpty()) return
+        voiceTimeoutJob?.cancel()
+        voiceTimeoutJob = null
+        speechRecognizer?.cancel()
+        sarvamTranscriber.stop()
+        Log.i(TAG, "Sending voice transcript length=${text.length}")
+        if (viewModel.uiState.value.isSending || viewModel.uiState.value.isPolling) {
+            voicePhase = VoiceInputPhase.Error
+            voicePartialText = "Agent busy"
+            return
+        }
+        if (startFreshConversationFromInput(text)) {
+            resetVoiceUi()
+        } else {
+            voicePhase = VoiceInputPhase.Error
+            voicePartialText = viewModel.uiState.value.errorMessage ?: "Agent send failed"
+        }
+    }
+
+    private fun resetVoiceUi() {
+        voicePhase = VoiceInputPhase.Idle
+        voiceRmsLevel = 0f
+        voicePartialText = ""
+        voiceReady = false
+    }
+
+    private fun voiceStatusText(): String =
+        when (voicePhase) {
+            VoiceInputPhase.Idle -> ""
+            VoiceInputPhase.Recording -> if (voiceReady) "Listening" else "Connecting"
+            VoiceInputPhase.Transcribing -> "Transcribing"
+            VoiceInputPhase.Preview -> "Preview"
+            VoiceInputPhase.Error -> "Voice failed"
+        }
+
+    private fun startFreshConversationFromInput(inputText: String): Boolean {
         val targetConversationId = viewModel.startNewConversation()
         viewModel.openConversation(targetConversationId)
-        requestedConversationPageId = targetConversationId
-        viewModel.sendMessage(inputText)
+        val sent = viewModel.sendMessage(inputText)
+        if (sent) {
+            requestedConversationPageId = targetConversationId
+        } else {
+            viewModel.deleteConversation(targetConversationId)
+        }
+        return sent
     }
 
     private companion object {
@@ -378,8 +523,17 @@ class MainActivity : ComponentActivity() {
         const val TAG = "SidekickVoice"
         const val VOICE_LAUNCH_DELAY_MS = 250L
         const val VOICE_RETRY_DELAY_MS = 300L
+        const val VOICE_HARD_CAP_MS = 20_000L
         const val MAX_VOICE_RETRIES = 1
     }
+}
+
+private enum class VoiceInputPhase {
+    Idle,
+    Recording,
+    Transcribing,
+    Preview,
+    Error,
 }
 
 private fun shouldRetryVoice(error: Int): Boolean =

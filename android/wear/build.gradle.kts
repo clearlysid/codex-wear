@@ -36,6 +36,7 @@ android {
         versionName = "1.0"
         buildConfigField("String", "DEFAULT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_AUTH_TOKEN", "")}\"")
         buildConfigField("String", "DEFAULT_BASE_URL", "\"${envProps.getProperty("DEFAULT_BASE_URL", "")}\"")
+        buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_STT_AUTH_TOKEN", "")}\"")
     }
 
     buildTypes {

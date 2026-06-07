@@ -44,6 +44,7 @@ import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 import androidx.wear.compose.material3.lazy.transformedHeight
 import com.sidekick.watch.data.AgentBackends
+import com.sidekick.watch.data.VoiceInputProviders
 import com.sidekick.watch.presentation.theme.appThemes
 import com.sidekick.watch.presentation.theme.themeById
 
@@ -54,11 +55,23 @@ fun SettingsScreen(
     baseUrl: String,
     model: String,
     authToken: String,
+    voiceInputProviderId: String,
+    sttBaseUrl: String,
+    sttModel: String,
+    sttLanguageCode: String,
+    sttMode: String,
+    sttAuthToken: String,
     themeId: String,
     onSaveAgentFlavor: (String) -> Unit,
     onSaveBaseUrl: (String) -> Unit,
     onSaveModel: (String) -> Unit,
     onSaveAuthToken: (String) -> Unit,
+    onSaveVoiceInputProvider: (String) -> Unit,
+    onSaveSttBaseUrl: (String) -> Unit,
+    onSaveSttModel: (String) -> Unit,
+    onSaveSttLanguageCode: (String) -> Unit,
+    onSaveSttMode: (String) -> Unit,
+    onSaveSttAuthToken: (String) -> Unit,
     onSaveTheme: (String) -> Unit,
     onResetAll: () -> Unit,
 ) {
@@ -153,6 +166,84 @@ fun SettingsScreen(
 
                 item {
                     Card(
+                        onClick = { dialog = SettingDialog.VoiceInputProvider },
+                        modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                        transformation = SurfaceTransformation(transformationSpec),
+                    ) {
+                        Text("Voice Input", style = MaterialTheme.typography.labelSmall)
+                        Text(
+                            text = voiceProviderName(voiceInputProviderId),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                if (voiceInputProviderId == VoiceInputProviders.SARVAM) {
+                    item {
+                        Card(
+                            onClick = { dialog = SettingDialog.SttBaseUrl },
+                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                            transformation = SurfaceTransformation(transformationSpec),
+                        ) {
+                            Text("STT URL", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                text = sttBaseUrl.ifBlank { VoiceInputProviders.SARVAM_BASE_URL },
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+
+                    item {
+                        Card(
+                            onClick = { dialog = SettingDialog.SttModel },
+                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                            transformation = SurfaceTransformation(transformationSpec),
+                        ) {
+                            Text("STT Model", style = MaterialTheme.typography.labelSmall)
+                            Text(sttModel.ifBlank { "saaras:v3" }, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    item {
+                        Card(
+                            onClick = { dialog = SettingDialog.SttLanguage },
+                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                            transformation = SurfaceTransformation(transformationSpec),
+                        ) {
+                            Text("STT Lang", style = MaterialTheme.typography.labelSmall)
+                            Text(sttLanguageCode.ifBlank { "unknown" }, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    item {
+                        Card(
+                            onClick = { dialog = SettingDialog.SttMode },
+                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                            transformation = SurfaceTransformation(transformationSpec),
+                        ) {
+                            Text("STT Mode", style = MaterialTheme.typography.labelSmall)
+                            Text(sttMode.ifBlank { "transcribe" }, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+
+                    item {
+                        Card(
+                            onClick = { dialog = SettingDialog.SttAuthToken },
+                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                            transformation = SurfaceTransformation(transformationSpec),
+                        ) {
+                            Text("STT Token", style = MaterialTheme.typography.labelSmall)
+                            Text(maskToken(sttAuthToken), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                item {
+                    Card(
                         onClick = { dialog = SettingDialog.Theme },
                         modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
                         transformation = SurfaceTransformation(transformationSpec),
@@ -230,6 +321,87 @@ fun SettingsScreen(
                     onCancel = { dialog = null },
                     onSave = { value ->
                         onSaveAuthToken(value)
+                        dialog = null
+                    },
+                )
+            }
+
+            SettingDialog.VoiceInputProvider -> {
+                VoiceInputProviderDialog(
+                    initialSelection = voiceInputProviderId,
+                    onCancel = { dialog = null },
+                    onSave = { chosenId ->
+                        onSaveVoiceInputProvider(chosenId)
+                        dialog = null
+                    },
+                )
+            }
+
+            SettingDialog.SttBaseUrl -> {
+                TextSettingDialog(
+                    title = "STT URL",
+                    initialValue = sttBaseUrl,
+                    keyboardType = KeyboardType.Uri,
+                    placeholder = VoiceInputProviders.SARVAM_BASE_URL,
+                    onCancel = { dialog = null },
+                    onSave = { value ->
+                        onSaveSttBaseUrl(value)
+                        dialog = null
+                    },
+                )
+            }
+
+            SettingDialog.SttModel -> {
+                TextSettingDialog(
+                    title = "STT Model",
+                    initialValue = sttModel,
+                    keyboardType = KeyboardType.Text,
+                    placeholder = "saaras:v3",
+                    onCancel = { dialog = null },
+                    onSave = { value ->
+                        onSaveSttModel(value)
+                        dialog = null
+                    },
+                )
+            }
+
+            SettingDialog.SttLanguage -> {
+                TextSettingDialog(
+                    title = "STT Lang",
+                    initialValue = sttLanguageCode,
+                    keyboardType = KeyboardType.Text,
+                    placeholder = "unknown",
+                    onCancel = { dialog = null },
+                    onSave = { value ->
+                        onSaveSttLanguageCode(value)
+                        dialog = null
+                    },
+                )
+            }
+
+            SettingDialog.SttMode -> {
+                TextSettingDialog(
+                    title = "STT Mode",
+                    initialValue = sttMode,
+                    keyboardType = KeyboardType.Text,
+                    placeholder = "transcribe",
+                    onCancel = { dialog = null },
+                    onSave = { value ->
+                        onSaveSttMode(value)
+                        dialog = null
+                    },
+                )
+            }
+
+            SettingDialog.SttAuthToken -> {
+                TextSettingDialog(
+                    title = "STT Token",
+                    initialValue = sttAuthToken,
+                    keyboardType = KeyboardType.Text,
+                    placeholder = "token",
+                    onCancel = { dialog = null },
+                    onSave = { value ->
+                        onSaveSttAuthToken(value)
                         dialog = null
                     },
                 )
@@ -473,11 +645,73 @@ private fun maskToken(token: String): String {
     return prefix + "*".repeat(token.length - 4)
 }
 
+@Composable
+private fun VoiceInputProviderDialog(
+    initialSelection: String,
+    onCancel: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var selected by remember(initialSelection) { mutableStateOf(initialSelection.ifBlank { VoiceInputProviders.SARVAM }) }
+    val providers = listOf(
+        VoiceInputProviders.SARVAM to "Sarvam",
+        VoiceInputProviders.ANDROID_RECOGNIZER to "Android",
+    )
+
+    AlertDialog(
+        visible = true,
+        onDismissRequest = onCancel,
+        title = { Text("Voice Input", style = MaterialTheme.typography.titleSmall) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                providers.forEach { (id, label) ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { selected = id }
+                                .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (selected == id) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
+                            contentDescription = null,
+                        )
+                        Text(label, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            FilledIconButton(onClick = { onSave(selected) }) {
+                Icon(Icons.Filled.Check, contentDescription = "Save")
+            }
+        },
+        dismissButton = {
+            FilledIconButton(onClick = onCancel) {
+                Icon(Icons.Filled.Close, contentDescription = "Cancel")
+            }
+        },
+    )
+}
+
+private fun voiceProviderName(providerId: String): String =
+    when (providerId) {
+        VoiceInputProviders.ANDROID_RECOGNIZER -> "Android"
+        else -> "Sarvam"
+    }
+
 private enum class SettingDialog {
     AgentFlavor,
     BaseUrl,
     Model,
     AuthToken,
+    VoiceInputProvider,
+    SttBaseUrl,
+    SttModel,
+    SttLanguage,
+    SttMode,
+    SttAuthToken,
     Theme,
     ResetAll,
 }

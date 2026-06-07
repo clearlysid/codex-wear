@@ -11,9 +11,17 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -27,6 +35,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.wear.compose.material3.MaterialTheme
+import androidx.wear.compose.material3.FilledIconButton
+import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.Text
 
 private const val GLOW_SHADER_SRC = """
@@ -77,7 +87,17 @@ private const val GLOW_SHADER_SRC = """
 """
 
 @Composable
-fun VoiceListeningScreen(rmsLevel: Float = 0f, partialText: String = "", isReady: Boolean = true) {
+fun VoiceListeningScreen(
+    rmsLevel: Float = 0f,
+    partialText: String = "",
+    isReady: Boolean = true,
+    statusText: String = "Ask Sidekick",
+    canSend: Boolean = false,
+    showStop: Boolean = true,
+    onStop: () -> Unit = {},
+    onCancel: () -> Unit = {},
+    onSend: () -> Unit = {},
+) {
     // Warm-up: yellow/orange, Ready: theme primary/tertiary
     val warmupColor1 = Color(0xFFFFB347) // orange
     val warmupColor2 = Color(0xFFFFD700) // gold
@@ -144,11 +164,12 @@ fun VoiceListeningScreen(rmsLevel: Float = 0f, partialText: String = "", isReady
         }
 
         // Transcription text
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 32.dp),
-            contentAlignment = Alignment.Center,
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             if (partialText.isNotEmpty()) {
                 Text(
@@ -162,12 +183,36 @@ fun VoiceListeningScreen(rmsLevel: Float = 0f, partialText: String = "", isReady
             } else {
                 if (isReady) {
                     Text(
-                        text = "Ask Sidekick",
+                        text = statusText,
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.6f),
                         textAlign = TextAlign.Center,
                     )
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp, vertical = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilledIconButton(onClick = onCancel) {
+                Icon(Icons.Filled.Close, contentDescription = "Cancel")
+            }
+            if (showStop) {
+                FilledIconButton(onClick = onStop) {
+                    Icon(Icons.Filled.Stop, contentDescription = "Stop")
+                }
+            }
+            FilledIconButton(
+                onClick = onSend,
+                enabled = canSend,
+            ) {
+                Icon(Icons.Filled.Check, contentDescription = "Send")
             }
         }
     }

@@ -43,6 +43,31 @@ bun run web:build
 bun run android:wear:build
 ```
 
+### Wear Voice Input
+
+- Voice input source is configurable in watch Settings.
+- Default source: Sarvam realtime STT.
+- Fallback source: Android speech recognizer.
+- Sarvam defaults:
+  - URL: `wss://api.sarvam.ai`
+  - model: `saaras:v3`
+  - language: `unknown`
+  - mode: `transcribe`
+  - hard cap: 20s
+- Local default token comes from `.env`:
+
+```bash
+DEFAULT_STT_AUTH_TOKEN=...
+```
+
+Sarvam transcript flow:
+
+```text
+mic -> realtime transcription preview -> Send -> agent
+```
+
+Failed sends should keep the preview visible and avoid empty conversations.
+
 ### Notes
 
 1. Pushing to `main` deploys landing page to Github pages.

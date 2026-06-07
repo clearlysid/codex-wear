@@ -13,8 +13,11 @@ import com.sidekick.watch.data.PersistedChatMessage
 import com.sidekick.watch.data.PersistedConversationState
 import com.sidekick.watch.data.PersistedConversationSummary
 import com.sidekick.watch.data.SettingsRepository
+import com.sidekick.watch.data.VoiceInputProviders
 import com.sidekick.watch.service.AgentService
 import java.util.UUID
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +44,7 @@ class ChatViewModel(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     private val senderId = "wear-user"
+    private var requestTimeoutJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -52,6 +56,12 @@ class ChatViewModel(
                         baseUrlInput = if (it.baseUrlInput.isEmpty()) settings.baseUrl else it.baseUrlInput,
                         authTokenInput = if (it.authTokenInput.isEmpty()) settings.authToken else it.authTokenInput,
                         modelInput = if (it.modelInput.isEmpty()) settings.model else it.modelInput,
+                        voiceInputProviderId = settings.voiceInputProviderId,
+                        sttBaseUrlInput = if (it.sttBaseUrlInput.isEmpty()) settings.sttBaseUrl else it.sttBaseUrlInput,
+                        sttAuthTokenInput = if (it.sttAuthTokenInput.isEmpty()) settings.sttAuthToken else it.sttAuthTokenInput,
+                        sttModelInput = if (it.sttModelInput.isEmpty()) settings.sttModel else it.sttModelInput,
+                        sttLanguageCodeInput = if (it.sttLanguageCodeInput.isEmpty()) settings.sttLanguageCode else it.sttLanguageCodeInput,
+                        sttModeInput = if (it.sttModeInput.isEmpty()) settings.sttMode else it.sttModeInput,
                     )
                 }
             }
@@ -96,6 +106,7 @@ class ChatViewModel(
                                 messagesByConversation = state.messagesByConversation + (convId to (withoutStreaming + botMsg)),
                                 conversations = updateConversationMeta(state.conversations, convId, requestState.finalText, false),
                                 isPolling = false,
+                                isSending = false,
                             )
                         }
                         requestState.isActive && requestState.streamingText.isNotEmpty() -> {
@@ -110,6 +121,8 @@ class ChatViewModel(
                     }
                 }
                 if (requestState.finalText != null || requestState.error != null) {
+                    requestTimeoutJob?.cancel()
+                    requestTimeoutJob = null
                     persistConversationState()
                     AgentRequestBus.reset()
                 }
@@ -145,6 +158,14 @@ class ChatViewModel(
                 baseUrl = AgentBackends.openclaw.defaultBaseUrl,
                 authToken = BuildConfig.DEFAULT_AUTH_TOKEN,
                 model = AgentBackends.openclaw.defaultModel.orEmpty(),
+            )
+            settingsRepository.saveVoiceSettings(
+                providerId = VoiceInputProviders.SARVAM,
+                sttBaseUrl = VoiceInputProviders.SARVAM_BASE_URL,
+                sttAuthToken = BuildConfig.DEFAULT_STT_AUTH_TOKEN,
+                sttModel = "saaras:v3",
+                sttLanguageCode = "unknown",
+                sttMode = "transcribe",
             )
             settingsRepository.saveConversationState(
                 PersistedConversationState(),
@@ -236,6 +257,36 @@ class ChatViewModel(
         persistCurrentSettings()
     }
 
+    fun saveVoiceInputProvider(providerId: String) {
+        _uiState.update { it.copy(voiceInputProviderId = providerId) }
+        persistCurrentVoiceSettings()
+    }
+
+    fun saveSttBaseUrl(baseUrl: String) {
+        _uiState.update { it.copy(sttBaseUrlInput = baseUrl) }
+        persistCurrentVoiceSettings()
+    }
+
+    fun saveSttAuthToken(authToken: String) {
+        _uiState.update { it.copy(sttAuthTokenInput = authToken) }
+        persistCurrentVoiceSettings()
+    }
+
+    fun saveSttModel(model: String) {
+        _uiState.update { it.copy(sttModelInput = model) }
+        persistCurrentVoiceSettings()
+    }
+
+    fun saveSttLanguageCode(languageCode: String) {
+        _uiState.update { it.copy(sttLanguageCodeInput = languageCode) }
+        persistCurrentVoiceSettings()
+    }
+
+    fun saveSttMode(mode: String) {
+        _uiState.update { it.copy(sttModeInput = mode) }
+        persistCurrentVoiceSettings()
+    }
+
     private fun persistCurrentSettings() {
         val state = _uiState.value
         viewModelScope.launch {
@@ -249,21 +300,39 @@ class ChatViewModel(
         }
     }
 
+    private fun persistCurrentVoiceSettings() {
+        val state = _uiState.value
+        viewModelScope.launch {
+            settingsRepository.saveVoiceSettings(
+                providerId = state.voiceInputProviderId,
+                sttBaseUrl = state.sttBaseUrlInput,
+                sttAuthToken = state.sttAuthTokenInput,
+                sttModel = state.sttModelInput,
+                sttLanguageCode = state.sttLanguageCodeInput,
+                sttMode = state.sttModeInput,
+            )
+            _uiState.update { it.copy(errorMessage = null) }
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
     }
 
-    fun sendMessage(content: String) {
+    fun sendMessage(content: String): Boolean {
         val trimmed = content.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty()) return false
 
         val state = _uiState.value
-        if (state.isSending || state.isPolling) return
+        if (state.isSending || state.isPolling) {
+            _uiState.update { it.copy(errorMessage = "Agent busy") }
+            return false
+        }
 
         val localConversationId = state.selectedConversationId
         if (localConversationId == null) {
             _uiState.update { it.copy(errorMessage = "Choose a conversation first.") }
-            return
+            return false
         }
 
         val settings = state.savedSettings
@@ -273,7 +342,7 @@ class ChatViewModel(
             _uiState.update {
                 it.copy(errorMessage = "Set ${backend.displayName} URL in Settings first.")
             }
-            return
+            return false
         }
 
         val backendConversationId = state.backendConversationIds[localConversationId] ?: UUID.randomUUID().toString()
@@ -304,6 +373,24 @@ class ChatViewModel(
         when (backend.id) {
             "openclaw" -> sendViaOpenAI(localConversationId, backendConversationId, settings)
             else -> sendViaSpacebot(localConversationId, backendConversationId, trimmed, settings)
+        }
+        scheduleRequestTimeout()
+        return true
+    }
+
+    private fun scheduleRequestTimeout() {
+        requestTimeoutJob?.cancel()
+        requestTimeoutJob = viewModelScope.launch {
+            delay(REQUEST_TIMEOUT_MS)
+            _uiState.update {
+                it.copy(
+                    isSending = false,
+                    isPolling = false,
+                    errorMessage = "Agent timed out",
+                )
+            }
+            AgentRequestBus.reset()
+            persistConversationState()
         }
     }
 
@@ -396,6 +483,7 @@ class ChatViewModel(
 
     companion object {
         private const val STREAMING_MESSAGE_ID = "__streaming__"
+        private const val REQUEST_TIMEOUT_MS = 90_000L
     }
 }
 
@@ -450,6 +538,12 @@ data class ChatUiState(
     val baseUrlInput: String = "",
     val authTokenInput: String = "",
     val modelInput: String = "",
+    val voiceInputProviderId: String = "",
+    val sttBaseUrlInput: String = "",
+    val sttAuthTokenInput: String = "",
+    val sttModelInput: String = "",
+    val sttLanguageCodeInput: String = "",
+    val sttModeInput: String = "",
     val isSending: Boolean = false,
     val isPolling: Boolean = false,
     val errorMessage: String? = null,

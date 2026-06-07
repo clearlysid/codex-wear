@@ -26,7 +26,19 @@ data class AgentSettings(
     val baseUrl: String = AgentBackends.openclaw.defaultBaseUrl,
     val authToken: String = BuildConfig.DEFAULT_AUTH_TOKEN,
     val model: String = AgentBackends.openclaw.defaultModel.orEmpty(),
+    val voiceInputProviderId: String = VoiceInputProviders.SARVAM,
+    val sttBaseUrl: String = VoiceInputProviders.SARVAM_BASE_URL,
+    val sttAuthToken: String = BuildConfig.DEFAULT_STT_AUTH_TOKEN,
+    val sttModel: String = "saaras:v3",
+    val sttLanguageCode: String = "unknown",
+    val sttMode: String = "transcribe",
 )
+
+object VoiceInputProviders {
+    const val SARVAM = "sarvam"
+    const val ANDROID_RECOGNIZER = "android_recognizer"
+    const val SARVAM_BASE_URL = "wss://api.sarvam.ai"
+}
 
 class SettingsRepository(private val context: Context) {
 
@@ -46,6 +58,12 @@ class SettingsRepository(private val context: Context) {
                     baseUrl = prefs[BASE_URL_KEY]?.ifBlank { backend.defaultBaseUrl } ?: backend.defaultBaseUrl,
                     authToken = prefs[AUTH_TOKEN_KEY]?.ifBlank { BuildConfig.DEFAULT_AUTH_TOKEN } ?: BuildConfig.DEFAULT_AUTH_TOKEN,
                     model = prefs[MODEL_KEY]?.ifBlank { backend.defaultModel.orEmpty() } ?: backend.defaultModel.orEmpty(),
+                    voiceInputProviderId = prefs[VOICE_INPUT_PROVIDER_KEY] ?: VoiceInputProviders.SARVAM,
+                    sttBaseUrl = prefs[STT_BASE_URL_KEY]?.ifBlank { VoiceInputProviders.SARVAM_BASE_URL } ?: VoiceInputProviders.SARVAM_BASE_URL,
+                    sttAuthToken = prefs[STT_AUTH_TOKEN_KEY]?.ifBlank { BuildConfig.DEFAULT_STT_AUTH_TOKEN } ?: BuildConfig.DEFAULT_STT_AUTH_TOKEN,
+                    sttModel = prefs[STT_MODEL_KEY]?.ifBlank { "saaras:v3" } ?: "saaras:v3",
+                    sttLanguageCode = prefs[STT_LANGUAGE_CODE_KEY]?.ifBlank { "unknown" } ?: "unknown",
+                    sttMode = prefs[STT_MODE_KEY]?.ifBlank { "transcribe" } ?: "transcribe",
                 )
             }
 
@@ -68,6 +86,29 @@ class SettingsRepository(private val context: Context) {
             prefs[BASE_URL_KEY] = normalizedBaseUrl
             prefs[AUTH_TOKEN_KEY] = authToken.trim()
             prefs[MODEL_KEY] = model.trim().ifBlank { backend.defaultModel.orEmpty() }
+        }
+    }
+
+    suspend fun saveVoiceSettings(
+        providerId: String,
+        sttBaseUrl: String,
+        sttAuthToken: String,
+        sttModel: String,
+        sttLanguageCode: String,
+        sttMode: String,
+    ) {
+        context.dataStore.edit { prefs ->
+            prefs[VOICE_INPUT_PROVIDER_KEY] =
+                if (providerId == VoiceInputProviders.ANDROID_RECOGNIZER) {
+                    VoiceInputProviders.ANDROID_RECOGNIZER
+                } else {
+                    VoiceInputProviders.SARVAM
+                }
+            prefs[STT_BASE_URL_KEY] = normalizeBaseUrl(sttBaseUrl).ifBlank { VoiceInputProviders.SARVAM_BASE_URL }
+            prefs[STT_AUTH_TOKEN_KEY] = sttAuthToken.trim()
+            prefs[STT_MODEL_KEY] = sttModel.trim().ifBlank { "saaras:v3" }
+            prefs[STT_LANGUAGE_CODE_KEY] = sttLanguageCode.trim().ifBlank { "unknown" }
+            prefs[STT_MODE_KEY] = sttMode.trim().ifBlank { "transcribe" }
         }
     }
 
@@ -98,6 +139,12 @@ class SettingsRepository(private val context: Context) {
         val BASE_URL_KEY = stringPreferencesKey("base_url")
         val AUTH_TOKEN_KEY = stringPreferencesKey("auth_token")
         val MODEL_KEY = stringPreferencesKey("model")
+        val VOICE_INPUT_PROVIDER_KEY = stringPreferencesKey("voice_input_provider")
+        val STT_BASE_URL_KEY = stringPreferencesKey("stt_base_url")
+        val STT_AUTH_TOKEN_KEY = stringPreferencesKey("stt_auth_token")
+        val STT_MODEL_KEY = stringPreferencesKey("stt_model")
+        val STT_LANGUAGE_CODE_KEY = stringPreferencesKey("stt_language_code")
+        val STT_MODE_KEY = stringPreferencesKey("stt_mode")
         val CONVERSATION_STATE_KEY = stringPreferencesKey("conversation_state_json")
         val THEME_KEY = stringPreferencesKey("color_theme")
     }
