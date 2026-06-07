@@ -166,7 +166,7 @@ fun ChatScreen(
                     }
 
                     uiState.messages.forEach { message ->
-                        item {
+                        item(key = message.id) {
                             if (message.role == MessageRole.USER) {
                                 Box(
                                     modifier = Modifier.fillMaxWidth(),
