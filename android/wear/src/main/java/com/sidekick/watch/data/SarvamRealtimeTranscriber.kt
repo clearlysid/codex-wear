@@ -5,9 +5,11 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import java.io.ByteArrayOutputStream
 import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
@@ -151,6 +153,8 @@ class SarvamRealtimeTranscriber(
             bufferSize,
         )
         val buffer = ByteArray(minBufferSize)
+        val pendingAudio = ByteArrayOutputStream()
+        var lastAudioSendMs = SystemClock.elapsedRealtime()
 
         try {
             audioRecord.startRecording()
@@ -158,12 +162,21 @@ class SarvamRealtimeTranscriber(
                 val read = audioRecord.read(buffer, 0, buffer.size)
                 if (read > 0) {
                     onEvent(TranscriptionEvent.Level(calculateRms(buffer, read)))
-                    webSocket.send(buildAudioMessage(buffer, read))
+                    pendingAudio.write(buffer, 0, read)
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastAudioSendMs >= AUDIO_SEND_INTERVAL_MS) {
+                        webSocket.send(buildAudioMessage(pendingAudio.toByteArray()))
+                        pendingAudio.reset()
+                        lastAudioSendMs = now
+                    }
                 }
             }
         } catch (ex: Exception) {
             onEvent(TranscriptionEvent.Error(ex.message ?: "Mic failed"))
         } finally {
+            if (pendingAudio.size() > 0) {
+                runCatching { webSocket.send(buildAudioMessage(pendingAudio.toByteArray())) }
+            }
             runCatching { audioRecord.stop() }
             audioRecord.release()
         }
@@ -233,9 +246,9 @@ class SarvamRealtimeTranscriber(
         return 0
     }
 
-    private fun buildAudioMessage(buffer: ByteArray, read: Int): String {
+    private fun buildAudioMessage(audioBytes: ByteArray): String {
         val audio = JSONObject()
-            .put("data", Base64.encodeToString(buffer.copyOf(read), Base64.NO_WRAP))
+            .put("data", Base64.encodeToString(audioBytes, Base64.NO_WRAP))
             .put("sample_rate", SAMPLE_RATE.toString())
             .put("encoding", "audio/wav")
         return JSONObject().put("audio", audio).toString()
@@ -274,5 +287,6 @@ class SarvamRealtimeTranscriber(
         private const val TAG = "SarvamStt"
         const val SAMPLE_RATE = 16000
         private const val FLUSH_TIMEOUT_MS = 8_000L
+        private const val AUDIO_SEND_INTERVAL_MS = 100L
     }
 }
