@@ -6,10 +6,14 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,7 +38,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Mic
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AppScaffold
@@ -54,6 +59,7 @@ fun ChatScreen(
     uiState: ChatUiState,
     conversationTitle: String,
     onOpenTextInput: () -> Unit,
+    onOpenVoiceInput: () -> Unit,
     onImageClick: (String) -> Unit = {},
     onOpenChats: () -> Unit,
 ) {
@@ -88,11 +94,47 @@ fun ChatScreen(
             ScreenScaffold(
                 scrollState = listState,
                 edgeButton = {
-                    EdgeButton(onClick = onOpenTextInput) {
-                        Icon(
-                            imageVector = Icons.Filled.Add,
-                            contentDescription = "Compose",
-                        )
+                    EdgeButton(onClick = {}) {
+                        Row(
+                            modifier = Modifier
+                                .width(88.dp)
+                                .fillMaxHeight(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(onClick = onOpenTextInput),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Keyboard,
+                                    contentDescription = "Text reply",
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .width(2.dp)
+                                    .height(28.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clickable(onClick = onOpenVoiceInput),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Mic,
+                                    contentDescription = "Voice reply",
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
                     }
                 },
             ) { contentPadding ->

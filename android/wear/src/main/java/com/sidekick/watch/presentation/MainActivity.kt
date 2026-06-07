@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     private var requestedKeyboardLaunch by mutableStateOf(false)
     private var requestedVoiceLaunch by mutableStateOf(false)
     private var shouldCreateConversationAfterComposer: Boolean = false
+    private var shouldCreateConversationAfterVoice: Boolean = true
     private var voicePhase by mutableStateOf(VoiceInputPhase.Idle)
     private var voiceRmsLevel by mutableStateOf(0f)
     private var voicePartialText by mutableStateOf("")
@@ -220,7 +221,10 @@ class MainActivity : ComponentActivity() {
                                             shouldCreateConversationAfterComposer = true
                                             launchRemoteTextInput()
                                         },
-                                        onNewConversationWithVoice = ::startVoiceInputWithPermission,
+                                        onNewConversationWithVoice = {
+                                            shouldCreateConversationAfterVoice = true
+                                            startVoiceInputWithPermission()
+                                        },
                                         onOpenConversation = { conversationId ->
                                             viewModel.openConversation(conversationId)
                                             homeNavController.navigate("$HOME_CONVERSATION_ROUTE/$conversationId")
@@ -243,6 +247,10 @@ class MainActivity : ComponentActivity() {
                                         uiState = uiState,
                                         conversationTitle = uiState.currentConversationTitle,
                                         onOpenTextInput = ::launchRemoteTextInput,
+                                        onOpenVoiceInput = {
+                                            shouldCreateConversationAfterVoice = false
+                                            startVoiceInputWithPermission()
+                                        },
                                         onImageClick = { url ->
                                             val encoded = URLEncoder.encode(url, "UTF-8")
                                             homeNavController.navigate("$HOME_IMAGE_ROUTE/$encoded")
@@ -470,6 +478,7 @@ class MainActivity : ComponentActivity() {
         silenceTimeoutJob = null
         speechRecognizer?.cancel()
         sarvamTranscriber.stop()
+        shouldCreateConversationAfterVoice = true
         resetVoiceUi()
     }
 
@@ -484,11 +493,19 @@ class MainActivity : ComponentActivity() {
         sarvamTranscriber.stop()
         Log.i(TAG, "Sending voice transcript length=${text.length}")
         if (viewModel.uiState.value.isSending || viewModel.uiState.value.isPolling) {
+            shouldCreateConversationAfterVoice = true
             voicePhase = VoiceInputPhase.Error
             voicePartialText = "Agent busy"
             return
         }
-        if (startFreshConversationFromInput(text)) {
+        val sent =
+            if (shouldCreateConversationAfterVoice) {
+                startFreshConversationFromInput(text)
+            } else {
+                viewModel.sendMessage(text)
+            }
+        shouldCreateConversationAfterVoice = true
+        if (sent) {
             resetVoiceUi()
         } else {
             voicePhase = VoiceInputPhase.Error
