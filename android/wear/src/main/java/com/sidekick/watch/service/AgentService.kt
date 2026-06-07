@@ -27,9 +27,11 @@ import com.sidekick.watch.viewmodel.MessageRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,6 +39,7 @@ class AgentService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
+    private var titleJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -68,11 +71,20 @@ class AgentService : Service() {
         val authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN).orEmpty()
         val model = intent.getStringExtra(EXTRA_MODEL)!!
         val messagesJson = intent.getStringExtra(EXTRA_MESSAGES_JSON)!!
+        val titleUserRequest = intent.getStringExtra(EXTRA_TITLE_USER_REQUEST)
 
         AgentRequestBus.updateState {
             it.copy(conversationId = conversationId, isActive = true, streamingText = "", finalText = null, error = null)
         }
         requestTileUpdate()
+
+        titleJob = launchTitleGeneration(
+            conversationId = conversationId,
+            baseUrl = baseUrl,
+            authToken = authToken,
+            model = model,
+            userRequest = titleUserRequest,
+        )
 
         scope.launch {
             try {
@@ -107,16 +119,21 @@ class AgentService : Service() {
         }
         scope.launch {
             persistResponse(responseText, conversationId)
-            requestTileUpdate()
-            releaseWakeLock()
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            finishRequest()
         }
     }
 
     private fun onRequestFailed() {
-        releaseWakeLock()
+        scope.launch {
+            finishRequest()
+        }
+    }
+
+    private suspend fun finishRequest() {
+        titleJob?.join()
+        titleJob = null
         requestTileUpdate()
+        releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -128,27 +145,77 @@ class AgentService : Service() {
     private suspend fun persistResponse(responseText: String, conversationId: String) {
         if (responseText.isBlank()) return
         try {
-                val settingsRepo = SettingsRepository(applicationContext)
-                val persisted = settingsRepo.loadConversationState() ?: return
-                val existingMessages = persisted.messagesByConversation[conversationId].orEmpty()
-                val botMessage = com.sidekick.watch.data.PersistedChatMessage(
-                    id = java.util.UUID.randomUUID().toString(),
-                    role = MessageRole.BOT.name,
-                    text = responseText,
+            val settingsRepo = SettingsRepository(applicationContext)
+            val persisted = settingsRepo.loadConversationState() ?: return
+            val existingMessages = persisted.messagesByConversation[conversationId].orEmpty()
+            val botMessage = com.sidekick.watch.data.PersistedChatMessage(
+                id = java.util.UUID.randomUUID().toString(),
+                role = MessageRole.BOT.name,
+                text = responseText,
+            )
+            val updatedMessages = persisted.messagesByConversation + (conversationId to (existingMessages + botMessage))
+            val now = System.currentTimeMillis()
+            val updatedConversations = persisted.conversations.map { conv ->
+                if (conv.id == conversationId) conv.copy(lastUpdatedEpochMs = now) else conv
+            }
+            settingsRepo.saveConversationState(
+                persisted.copy(
+                    messagesByConversation = updatedMessages,
+                    conversations = updatedConversations,
                 )
-                val updatedMessages = persisted.messagesByConversation + (conversationId to (existingMessages + botMessage))
-                val now = System.currentTimeMillis()
-                val updatedConversations = persisted.conversations.map { conv ->
-                    if (conv.id == conversationId) conv.copy(lastUpdatedEpochMs = now) else conv
-                }
-                settingsRepo.saveConversationState(
-                    persisted.copy(
-                        messagesByConversation = updatedMessages,
-                        conversations = updatedConversations,
-                    )
-                )
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to persist response", e)
+        }
+    }
+
+    private fun launchTitleGeneration(
+        conversationId: String,
+        baseUrl: String,
+        authToken: String,
+        model: String,
+        userRequest: String?,
+    ): Job? {
+        if (userRequest.isNullOrBlank()) return null
+        return scope.launch {
+            runCatching {
+                withTimeout(TITLE_REQUEST_TIMEOUT_MS) {
+                    OpenAIRepository(HttpClientProvider.client)
+                        .generateConversationTitle(
+                            baseUrl = baseUrl,
+                            authToken = authToken,
+                            model = model,
+                            userRequest = userRequest,
+                        )
+                        .getOrThrow()
+                }
+            }.onSuccess { generatedTitle ->
+                persistTitle(generatedTitle, conversationId)
+                requestTileUpdate()
+            }.onFailure { e ->
+                Log.w(TAG, "Title generation failed", e)
+            }
+        }
+    }
+
+    private suspend fun persistTitle(generatedTitle: String, conversationId: String) {
+        val title = generatedTitle.trim()
+        if (title.isBlank()) return
+        try {
+            val settingsRepo = SettingsRepository(applicationContext)
+            val persisted = settingsRepo.loadConversationState() ?: return
+            val updatedConversations = persisted.conversations.map { conv ->
+                if (conv.id == conversationId && conv.title.isNullOrBlank()) {
+                    conv.copy(title = title)
+                } else {
+                    conv
+                }
+            }
+            settingsRepo.saveConversationState(
+                persisted.copy(conversations = updatedConversations),
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist title", e)
         }
     }
 
@@ -204,6 +271,8 @@ class AgentService : Service() {
         private const val EXTRA_AUTH_TOKEN = "auth_token"
         private const val EXTRA_MODEL = "model"
         private const val EXTRA_MESSAGES_JSON = "messages_json"
+        private const val EXTRA_TITLE_USER_REQUEST = "title_user_request"
+        private const val TITLE_REQUEST_TIMEOUT_MS = 10_000L
 
         fun startOpenAI(
             context: Context,
@@ -211,6 +280,7 @@ class AgentService : Service() {
             backendConversationId: String,
             settings: AgentSettings,
             messagesJson: String,
+            titleUserRequest: String?,
         ) {
             val intent = Intent(context, AgentService::class.java).apply {
                 putExtra(EXTRA_ACTION, ACTION_OPENAI)
@@ -220,6 +290,9 @@ class AgentService : Service() {
                 putExtra(EXTRA_AUTH_TOKEN, settings.authToken)
                 putExtra(EXTRA_MODEL, settings.model)
                 putExtra(EXTRA_MESSAGES_JSON, messagesJson)
+                if (!titleUserRequest.isNullOrBlank()) {
+                    putExtra(EXTRA_TITLE_USER_REQUEST, titleUserRequest)
+                }
             }
             context.startForegroundService(intent)
         }
