@@ -61,13 +61,24 @@ class OpenAIRepository(
                     channel.close()
                     return
                 }
-                val content = runCatching {
-                    JSONObject(data)
-                        .optJSONArray("choices")
-                        ?.optJSONObject(0)
-                        ?.optJSONObject("delta")
+                val json = runCatching { JSONObject(data) }.getOrNull() ?: return
+                json.optJSONObject("error")?.let { error ->
+                    val message = error.optString("message").ifBlank { "Stream error" }
+                    channel.close(Exception(message))
+                    return
+                }
+                val choice = json.optJSONArray("choices")?.optJSONObject(0)
+                val content = choice
+                    ?.optJSONObject("delta")
+                    ?.optString("content")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: choice
+                        ?.optJSONObject("message")
                         ?.optString("content")
-                }.getOrNull()
+                        ?.takeIf { it.isNotEmpty() }
+                    ?: choice
+                        ?.optString("text")
+                        ?.takeIf { it.isNotEmpty() }
                 if (!content.isNullOrEmpty()) {
                     trySend(content)
                 }
@@ -76,7 +87,8 @@ class OpenAIRepository(
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 val error = t
                     ?: if (response != null && !response.isSuccessful) {
-                        Exception("OpenAI request failed (${response.code})")
+                        val body = response.body?.string().orEmpty()
+                        Exception("OpenAI request failed (${response.code})${body.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()}")
                     } else {
                         null
                     }
