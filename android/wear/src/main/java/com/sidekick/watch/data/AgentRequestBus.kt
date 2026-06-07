@@ -3,6 +3,7 @@ package com.sidekick.watch.data
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 object AgentRequestBus {
 
@@ -19,7 +20,7 @@ object AgentRequestBus {
     val state: StateFlow<RequestState> = _state.asStateFlow()
 
     fun updateState(transform: (RequestState) -> RequestState) {
-        _state.value = transform(_state.value)
+        _state.update(transform)
     }
 
     fun reset() {

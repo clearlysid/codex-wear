@@ -105,6 +105,13 @@ class ChatViewModel(
                                 activeConversationId = null,
                             )
                         }
+                        requestState.generatedTitle != null -> state.copy(
+                            conversations = updateConversationTitle(
+                                conversations = state.conversations,
+                                conversationId = convId,
+                                generatedTitle = requestState.generatedTitle,
+                            ),
+                        )
                         requestState.isActive && requestState.streamingText.isNotEmpty() -> {
                             val existing = state.messagesByConversation[convId].orEmpty()
                             val withoutStreaming = existing.filter { it.id != STREAMING_MESSAGE_ID }
@@ -117,7 +124,7 @@ class ChatViewModel(
                         else -> state
                     }
                 }
-                if (requestState.finalText != null || requestState.error != null) {
+                if (requestState.finalText != null || requestState.generatedTitle != null || requestState.error != null) {
                     persistConversationState()
                     AgentRequestBus.reset()
                 }

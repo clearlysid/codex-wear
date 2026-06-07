@@ -30,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
@@ -102,9 +103,7 @@ class AgentService : Service() {
                     }
 
                 val finalText = buffer.toString()
-                val generatedTitle = titleDeferred?.await()
-                titleDeferred = null
-                AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText, generatedTitle = generatedTitle) }
+                AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText) }
                 onRequestComplete(finalText, conversationId)
             } catch (e: CancellationException) {
                 throw e
@@ -121,9 +120,7 @@ class AgentService : Service() {
             vibrateResponse()
             ResponseNotifier(applicationContext).notifyIfInBackground(responseText)
         }
-        scope.launch {
-            finishRequest()
-        }
+        finishAfterTitle(conversationId)
     }
 
     private fun onRequestFailed() {
@@ -135,14 +132,36 @@ class AgentService : Service() {
     }
 
     private suspend fun finishRequest() {
-        requestTileUpdate()
-        releaseWakeLock()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        withContext(Dispatchers.Main.immediate) {
+            requestTileUpdate()
+            releaseWakeLock()
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     private fun requestTileUpdate() {
         TileService.getUpdater(applicationContext).requestUpdate(SidekickTileService::class.java)
+    }
+
+    private fun finishAfterTitle(conversationId: String) {
+        val deferred = titleDeferred
+        if (deferred == null) {
+            scope.launch { finishRequest() }
+            return
+        }
+        scope.launch(Dispatchers.Default) {
+            try {
+                val generatedTitle = deferred.await()
+                if (!generatedTitle.isNullOrBlank()) {
+                    AgentRequestBus.updateState { it.copy(conversationId = conversationId, generatedTitle = generatedTitle) }
+                    requestTileUpdate()
+                }
+            } finally {
+                titleDeferred = null
+                finishRequest()
+            }
+        }
     }
 
     private fun generateTitleAsync(

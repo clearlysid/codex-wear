@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
@@ -107,7 +108,7 @@ fun ChatScreen(
                                     .fillMaxHeight()
                                     .padding(3.dp)
                                     .clip(RoundedCornerShape(18.dp))
-                                    .background(KeyboardActionGreen)
+                                    .background(EdgeActionBackground)
                                     .clickable(onClick = onOpenTextInput),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -115,7 +116,7 @@ fun ChatScreen(
                                     imageVector = Icons.Filled.Keyboard,
                                     contentDescription = "Text reply",
                                     modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface,
+                                    tint = Color.White,
                                 )
                             }
                             Box(
@@ -131,7 +132,7 @@ fun ChatScreen(
                                     .fillMaxHeight()
                                     .padding(3.dp)
                                     .clip(RoundedCornerShape(18.dp))
-                                    .background(MicActionPeach)
+                                    .background(EdgeActionBackground)
                                     .clickable(onClick = onOpenVoiceInput),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -139,7 +140,7 @@ fun ChatScreen(
                                     imageVector = Icons.Filled.Mic,
                                     contentDescription = "Voice reply",
                                     modifier = Modifier.size(20.dp),
-                                    tint = MicActionContent,
+                                    tint = Color.White,
                                 )
                             }
                         }
@@ -293,3 +294,5 @@ private data class MarkdownMarker(
     val fontWeight: FontWeight?,
     val fontStyle: FontStyle?,
 )
+
+private val EdgeActionBackground = Color(0xFF242424)
