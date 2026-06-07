@@ -10,9 +10,9 @@ I built this because I needed an "Agent Babysitter" that I could tap into, even 
 - [x] Basic UI
 - [x] Hermes support
 - [x] OpenClaw support
-- [ ] Haptics for replies
-- [ ] Voice mode quick launch
-- [ ] Tile + Complication
+- [x] Haptics for replies
+- [x] Voice mode quick launch
+- [x] Tile + Complication
 - [ ] Nicer landing page
 
 ## Developer Guide
