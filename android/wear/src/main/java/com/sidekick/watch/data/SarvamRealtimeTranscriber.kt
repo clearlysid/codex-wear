@@ -100,7 +100,8 @@ class SarvamRealtimeTranscriber(
 
     fun stop(flush: Boolean = false) {
         val alreadyStopping = stopping.getAndSet(true)
-        if (alreadyStopping && flush) return
+        if (alreadyStopping && !flush) return
+        if (flush && flushRequested.get()) return
         recordJob?.cancel()
         recordJob = null
         if (flush) {
