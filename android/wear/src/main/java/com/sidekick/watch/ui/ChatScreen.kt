@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AppScaffold
+import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.Icon
@@ -95,7 +96,13 @@ fun ChatScreen(
             ScreenScaffold(
                 scrollState = listState,
                 edgeButton = {
-                    EdgeButton(onClick = {}) {
+                    EdgeButton(
+                        onClick = {},
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = EdgeActionBackground,
+                            contentColor = Color.White,
+                        ),
+                    ) {
                         Row(
                             modifier = Modifier
                                 .width(88.dp)
