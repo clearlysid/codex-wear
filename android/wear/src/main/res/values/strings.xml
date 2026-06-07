@@ -3,4 +3,6 @@
     <string name="hello_world">Hello, %1$s!</string>
     <string name="shortcut_voice_label">Voice</string>
     <string name="shortcut_voice_long_label">Talk to Sidekick</string>
+    <string name="complication_keyboard_label">Sidekick Type</string>
+    <string name="complication_voice_label">Sidekick Talk</string>
 </resources>

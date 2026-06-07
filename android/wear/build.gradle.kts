@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.androidx.wear.tiles)
     implementation(libs.androidx.wear.tiles.material)
     implementation(libs.androidx.wear.protolayout.material3)
+    implementation(libs.androidx.wear.watchface.complications.data.source.ktx)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.compose.ui.tooling)
