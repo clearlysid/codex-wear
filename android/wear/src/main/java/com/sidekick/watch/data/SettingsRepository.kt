@@ -17,15 +17,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "spacebot_settings")
+private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "sidekick_settings")
 
 private val json = Json { ignoreUnknownKeys = true }
 
 data class AgentSettings(
-    val backendId: String = AgentBackends.openclaw.id,
-    val baseUrl: String = AgentBackends.openclaw.defaultBaseUrl,
+    val backendId: String = AgentBackends.hermes.id,
+    val baseUrl: String = AgentBackends.hermes.defaultBaseUrl,
     val authToken: String = BuildConfig.DEFAULT_AUTH_TOKEN,
-    val model: String = AgentBackends.openclaw.defaultModel.orEmpty(),
+    val model: String = AgentBackends.hermes.defaultModel.orEmpty(),
     val voiceInputProviderId: String = VoiceInputProviders.SARVAM,
     val sttBaseUrl: String = VoiceInputProviders.SARVAM_BASE_URL,
     val sttAuthToken: String = BuildConfig.DEFAULT_STT_AUTH_TOKEN,
@@ -66,17 +66,6 @@ class SettingsRepository(private val context: Context) {
                     sttMode = prefs[STT_MODE_KEY]?.ifBlank { "transcribe" } ?: "transcribe",
                 )
             }
-
-    val themeFlow: Flow<String> =
-        context.dataStore.data
-            .catch { ex ->
-                if (ex is IOException) emit(emptyPreferences()) else throw ex
-            }
-            .map { prefs -> prefs[THEME_KEY] ?: "default" }
-
-    suspend fun saveTheme(themeId: String) {
-        context.dataStore.edit { prefs -> prefs[THEME_KEY] = themeId }
-    }
 
     suspend fun saveSettings(backendId: String, baseUrl: String, authToken: String, model: String) {
         context.dataStore.edit { prefs ->
@@ -146,7 +135,6 @@ class SettingsRepository(private val context: Context) {
         val STT_LANGUAGE_CODE_KEY = stringPreferencesKey("stt_language_code")
         val STT_MODE_KEY = stringPreferencesKey("stt_mode")
         val CONVERSATION_STATE_KEY = stringPreferencesKey("conversation_state_json")
-        val THEME_KEY = stringPreferencesKey("color_theme")
     }
 }
 

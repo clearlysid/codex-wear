@@ -14,15 +14,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -31,12 +30,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.wear.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
+import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 
 private const val GLOW_SHADER_SRC = """
@@ -93,14 +91,10 @@ fun VoiceListeningScreen(
     isReady: Boolean = true,
     statusText: String = "Ask Sidekick",
     canSend: Boolean = false,
-    showStop: Boolean = true,
-    onStop: () -> Unit = {},
-    onCancel: () -> Unit = {},
     onSend: () -> Unit = {},
 ) {
-    // Warm-up: yellow/orange, Ready: theme primary/tertiary
-    val warmupColor1 = Color(0xFFFFB347) // orange
-    val warmupColor2 = Color(0xFFFFD700) // gold
+    val warmupColor1 = Color(0xFFB8B8B8)
+    val warmupColor2 = Color(0xFF8A8A8A)
 
     val color1 by animateColorAsState(
         targetValue = if (isReady) MaterialTheme.colorScheme.primary else warmupColor1,
@@ -129,6 +123,13 @@ fun VoiceListeningScreen(
     )
 
     val intensity = maxOf(idlePulse, animatedRms)
+    val transcriptScrollState = rememberScrollState()
+
+    LaunchedEffect(partialText, transcriptScrollState.maxValue) {
+        if (partialText.isNotEmpty()) {
+            transcriptScrollState.scrollTo(transcriptScrollState.maxValue)
+        }
+    }
 
     val shader = remember { RuntimeShader(GLOW_SHADER_SRC) }
     val shaderBrush = remember { ShaderBrush(shader) }
@@ -167,7 +168,13 @@ fun VoiceListeningScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
+                .padding(
+                    start = 24.dp,
+                    top = 32.dp,
+                    end = 24.dp,
+                    bottom = if (canSend) 76.dp else 32.dp,
+                )
+                .verticalScroll(transcriptScrollState),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -177,8 +184,6 @@ fun VoiceListeningScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.White,
                     textAlign = TextAlign.Center,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
                 )
             } else {
                 if (isReady) {
@@ -192,27 +197,14 @@ fun VoiceListeningScreen(
             }
         }
 
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp, vertical = 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilledIconButton(onClick = onCancel) {
-                Icon(Icons.Filled.Close, contentDescription = "Cancel")
-            }
-            if (showStop) {
-                FilledIconButton(onClick = onStop) {
-                    Icon(Icons.Filled.Stop, contentDescription = "Stop")
-                }
-            }
+        if (canSend) {
             FilledIconButton(
                 onClick = onSend,
-                enabled = canSend,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 18.dp),
             ) {
-                Icon(Icons.Filled.Check, contentDescription = "Send")
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
             }
         }
     }
@@ -222,7 +214,11 @@ fun VoiceListeningScreen(
 @Composable
 private fun VoiceListeningScreenPreview() {
     MaterialTheme {
-        VoiceListeningScreen(rmsLevel = 5f, partialText = "Set a timer for 10 minutes")
+        VoiceListeningScreen(
+            rmsLevel = 5f,
+            partialText = "Remind me tomorrow morning to send the launch notes, check the deployment logs, and ask Priya if the calendar sync issue is still happening.",
+            canSend = true,
+        )
     }
 }
 

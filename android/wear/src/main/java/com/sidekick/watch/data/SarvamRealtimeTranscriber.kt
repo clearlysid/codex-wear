@@ -6,6 +6,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Base64
+import android.util.Log
 import androidx.annotation.RequiresPermission
 import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicBoolean
@@ -25,6 +26,8 @@ import org.json.JSONObject
 
 sealed interface TranscriptionEvent {
     data object Connected : TranscriptionEvent
+    data object SpeechStarted : TranscriptionEvent
+    data object SpeechEnded : TranscriptionEvent
     data class Level(val rms: Float) : TranscriptionEvent
     data class Partial(val text: String) : TranscriptionEvent
     data class Final(val text: String) : TranscriptionEvent
@@ -40,12 +43,14 @@ class SarvamRealtimeTranscriber(
     private val stopping = AtomicBoolean(false)
     private val flushRequested = AtomicBoolean(false)
     private var eventSink: ((TranscriptionEvent) -> Unit)? = null
+    private var accumulatedTranscript = ""
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     fun start(settings: AgentSettings, onEvent: (TranscriptionEvent) -> Unit) {
         stop()
         stopping.set(false)
         flushRequested.set(false)
+        accumulatedTranscript = ""
         eventSink = onEvent
 
         val token = settings.sttAuthToken.trim()
@@ -104,8 +109,16 @@ class SarvamRealtimeTranscriber(
             scope.launch {
                 delay(FLUSH_TIMEOUT_MS)
                 if (flushRequested.get()) {
-                    eventSink?.invoke(TranscriptionEvent.Error("Transcription timed out"))
-                    webSocket?.close(1000, "timeout")
+                    val fallbackTranscript = accumulatedTranscript.trim()
+                    if (fallbackTranscript.isNotEmpty()) {
+                        Log.i(TAG, "Flush timed out; using latest transcript length=${fallbackTranscript.length}")
+                        flushRequested.set(false)
+                        eventSink?.invoke(TranscriptionEvent.Final(fallbackTranscript))
+                        webSocket?.close(1000, "done")
+                    } else {
+                        eventSink?.invoke(TranscriptionEvent.Error("Transcription timed out"))
+                        webSocket?.close(1000, "timeout")
+                    }
                     webSocket = null
                 }
             }
@@ -166,21 +179,57 @@ class SarvamRealtimeTranscriber(
             stop()
             return
         }
+        if (type == "events") {
+            when (data?.optString("signal_type")) {
+                "START_SPEECH" -> onEvent(TranscriptionEvent.SpeechStarted)
+                "END_SPEECH" -> onEvent(TranscriptionEvent.SpeechEnded)
+            }
+            return
+        }
 
         val transcript = data?.optString("transcript").orEmpty().ifBlank {
             json.optString("transcript")
         }.trim()
 
         if (transcript.isBlank()) return
+        val fullTranscript = mergeTranscript(transcript)
         if (flushRequested.get() && (type == "data" || type == "transcript")) {
             flushRequested.set(false)
-            onEvent(TranscriptionEvent.Final(transcript))
+            onEvent(TranscriptionEvent.Final(fullTranscript))
             webSocket?.close(1000, "done")
             webSocket = null
             eventSink = null
         } else {
-            onEvent(TranscriptionEvent.Partial(transcript))
+            onEvent(TranscriptionEvent.Partial(fullTranscript))
         }
+    }
+
+    private fun mergeTranscript(transcript: String): String {
+        val next = transcript.trim()
+        val current = accumulatedTranscript.trim()
+        accumulatedTranscript = when {
+            current.isBlank() -> next
+            next == current -> current
+            next.startsWith(current) -> next
+            current.endsWith(next) -> current
+            else -> {
+                val overlap = longestOverlap(current, next)
+                if (overlap > 0) {
+                    current + next.drop(overlap)
+                } else {
+                    "$current $next"
+                }
+            }
+        }
+        return accumulatedTranscript
+    }
+
+    private fun longestOverlap(prefix: String, suffix: String): Int {
+        val max = minOf(prefix.length, suffix.length)
+        for (length in max downTo 1) {
+            if (prefix.endsWith(suffix.take(length))) return length
+        }
+        return 0
     }
 
     private fun buildAudioMessage(buffer: ByteArray, read: Int): String {
@@ -221,6 +270,7 @@ class SarvamRealtimeTranscriber(
     private fun url(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
 
     companion object {
+        private const val TAG = "SarvamStt"
         const val SAMPLE_RATE = 16000
         private const val FLUSH_TIMEOUT_MS = 8_000L
     }

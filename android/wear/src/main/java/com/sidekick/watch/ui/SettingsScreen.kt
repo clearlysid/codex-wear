@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -35,6 +33,7 @@ import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AlertDialog
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Card
+import androidx.wear.compose.material3.CardDefaults
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.MaterialTheme
@@ -45,8 +44,6 @@ import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 import androidx.wear.compose.material3.lazy.transformedHeight
 import com.sidekick.watch.data.AgentBackends
 import com.sidekick.watch.data.VoiceInputProviders
-import com.sidekick.watch.presentation.theme.appThemes
-import com.sidekick.watch.presentation.theme.themeById
 
 @Composable
 fun SettingsScreen(
@@ -61,7 +58,6 @@ fun SettingsScreen(
     sttLanguageCode: String,
     sttMode: String,
     sttAuthToken: String,
-    themeId: String,
     onSaveAgentFlavor: (String) -> Unit,
     onSaveBaseUrl: (String) -> Unit,
     onSaveModel: (String) -> Unit,
@@ -72,7 +68,6 @@ fun SettingsScreen(
     onSaveSttLanguageCode: (String) -> Unit,
     onSaveSttMode: (String) -> Unit,
     onSaveSttAuthToken: (String) -> Unit,
-    onSaveTheme: (String) -> Unit,
     onResetAll: () -> Unit,
 ) {
     var dialog by remember { mutableStateOf<SettingDialog?>(null) }
@@ -98,6 +93,13 @@ fun SettingsScreen(
                             modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
                         )
                     }
+                }
+
+                item {
+                    SectionTitle(
+                        title = "Agent",
+                        modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                    )
                 }
 
                 item {
@@ -162,6 +164,13 @@ fun SettingsScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                }
+
+                item {
+                    SectionTitle(
+                        title = "Voice",
+                        modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                    )
                 }
 
                 item {
@@ -243,17 +252,10 @@ fun SettingsScreen(
                 }
 
                 item {
-                    Card(
-                        onClick = { dialog = SettingDialog.Theme },
+                    SectionTitle(
+                        title = "Misc",
                         modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                        transformation = SurfaceTransformation(transformationSpec),
-                    ) {
-                        Text("Color Theme", style = MaterialTheme.typography.labelSmall)
-                        Text(
-                            text = themeById(themeId).displayName,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
+                    )
                 }
 
                 item {
@@ -261,11 +263,14 @@ fun SettingsScreen(
                         onClick = { dialog = SettingDialog.ResetAll },
                         modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
                         transformation = SurfaceTransformation(transformationSpec),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
                     ) {
                         Text(
                             "Reset All",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
                         )
                     }
                 }
@@ -407,17 +412,6 @@ fun SettingsScreen(
                 )
             }
 
-            SettingDialog.Theme -> {
-                ThemePickerDialog(
-                    selectedThemeId = themeId,
-                    onCancel = { dialog = null },
-                    onSave = { chosenId ->
-                        onSaveTheme(chosenId)
-                        dialog = null
-                    },
-                )
-            }
-
             SettingDialog.ResetAll -> {
                 AlertDialog(
                     visible = true,
@@ -448,6 +442,16 @@ fun SettingsScreen(
             null -> Unit
         }
     }
+}
+
+@Composable
+private fun SectionTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.padding(start = 10.dp, top = 10.dp, bottom = 2.dp),
+    )
 }
 
 @Composable
@@ -497,61 +501,6 @@ private fun AgentFlavorDialog(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "Cancel",
                 )
-            }
-        },
-    )
-}
-
-@Composable
-private fun ThemePickerDialog(
-    selectedThemeId: String,
-    onCancel: () -> Unit,
-    onSave: (String) -> Unit,
-) {
-    var selected by remember(selectedThemeId) { mutableStateOf(selectedThemeId) }
-
-    AlertDialog(
-        visible = true,
-        onDismissRequest = onCancel,
-        title = { Text("Color Theme", style = MaterialTheme.typography.titleSmall) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                appThemes.forEach { theme ->
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { selected = theme.id }
-                                .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .background(theme.previewColor),
-                        )
-                        Text(theme.displayName, style = MaterialTheme.typography.bodySmall)
-                        if (selected == theme.id) {
-                            Icon(
-                                imageVector = Icons.Filled.Check,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            FilledIconButton(onClick = { onSave(selected) }) {
-                Icon(Icons.Filled.Check, contentDescription = "Save")
-            }
-        },
-        dismissButton = {
-            FilledIconButton(onClick = onCancel) {
-                Icon(Icons.Filled.Close, contentDescription = "Cancel")
             }
         },
     )
@@ -712,6 +661,5 @@ private enum class SettingDialog {
     SttLanguage,
     SttMode,
     SttAuthToken,
-    Theme,
     ResetAll,
 }

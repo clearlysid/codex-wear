@@ -21,7 +21,6 @@ import com.sidekick.watch.data.OpenAIMessage
 import com.sidekick.watch.data.OpenAIRepository
 import com.sidekick.watch.data.ResponseNotifier
 import com.sidekick.watch.data.SettingsRepository
-import com.sidekick.watch.data.SpacebotRepository
 import com.sidekick.watch.tile.SidekickTileService
 import com.sidekick.watch.viewmodel.ChatMessage
 import com.sidekick.watch.viewmodel.MessageRole
@@ -56,7 +55,6 @@ class AgentService : Service() {
 
         when (action) {
             ACTION_OPENAI -> launchOpenAI(intent)
-            ACTION_SPACEBOT -> launchSpacebot(intent)
             else -> stopSelf()
         }
 
@@ -100,64 +98,6 @@ class AgentService : Service() {
                 onRequestFailed()
             }
         }
-    }
-
-    private fun launchSpacebot(intent: Intent) {
-        val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID)!!
-        val backendConversationId = intent.getStringExtra(EXTRA_BACKEND_CONVERSATION_ID)!!
-        val baseUrl = intent.getStringExtra(EXTRA_BASE_URL)!!
-        val authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN).orEmpty()
-        val content = intent.getStringExtra(EXTRA_CONTENT)!!
-        val senderId = intent.getStringExtra(EXTRA_SENDER_ID)!!
-
-        AgentRequestBus.updateState {
-            it.copy(conversationId = conversationId, isActive = true, streamingText = "", finalText = null, error = null)
-        }
-        requestTileUpdate()
-
-        scope.launch {
-            try {
-                val repo = SpacebotRepository(HttpClientProvider.client)
-
-                val sendResult = repo.sendMessage(baseUrl, authToken, backendConversationId, senderId, content)
-                if (sendResult.isFailure) {
-                    throw sendResult.exceptionOrNull() ?: Exception("Send failed")
-                }
-
-                val pollResult = repo.pollReplies(baseUrl, authToken, backendConversationId)
-                if (pollResult.isFailure) {
-                    throw pollResult.exceptionOrNull() ?: Exception("Poll failed")
-                }
-
-                val replies = pollResult.getOrNull().orEmpty()
-                val finalText = buildSpacebotResponseText(replies)
-                AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText) }
-                onRequestComplete(finalText, conversationId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e(TAG, "Spacebot request failed", e)
-                AgentRequestBus.updateState { it.copy(isActive = false, error = e.message ?: "Request failed") }
-                onRequestFailed()
-            }
-        }
-    }
-
-    private fun buildSpacebotResponseText(replies: List<com.sidekick.watch.data.SpacebotMessage>): String {
-        val buffer = StringBuilder()
-        for (msg in replies) {
-            when (msg.type) {
-                SpacebotRepository.TYPE_STREAM_CHUNK -> buffer.append(msg.content)
-                SpacebotRepository.TYPE_STREAM_END -> { /* flush marker */ }
-                SpacebotRepository.TYPE_TEXT, SpacebotRepository.TYPE_FILE -> {
-                    if (msg.content.isNotBlank()) {
-                        if (buffer.isNotEmpty()) buffer.append("\n")
-                        buffer.append(msg.content)
-                    }
-                }
-            }
-        }
-        return buffer.toString()
     }
 
     private fun onRequestComplete(responseText: String, conversationId: String) {
@@ -258,15 +198,12 @@ class AgentService : Service() {
 
         private const val EXTRA_ACTION = "action"
         private const val ACTION_OPENAI = "openai"
-        private const val ACTION_SPACEBOT = "spacebot"
         private const val EXTRA_CONVERSATION_ID = "conversation_id"
         private const val EXTRA_BACKEND_CONVERSATION_ID = "backend_conversation_id"
         private const val EXTRA_BASE_URL = "base_url"
         private const val EXTRA_AUTH_TOKEN = "auth_token"
         private const val EXTRA_MODEL = "model"
         private const val EXTRA_MESSAGES_JSON = "messages_json"
-        private const val EXTRA_CONTENT = "content"
-        private const val EXTRA_SENDER_ID = "sender_id"
 
         fun startOpenAI(
             context: Context,
@@ -283,26 +220,6 @@ class AgentService : Service() {
                 putExtra(EXTRA_AUTH_TOKEN, settings.authToken)
                 putExtra(EXTRA_MODEL, settings.model)
                 putExtra(EXTRA_MESSAGES_JSON, messagesJson)
-            }
-            context.startForegroundService(intent)
-        }
-
-        fun startSpacebot(
-            context: Context,
-            conversationId: String,
-            backendConversationId: String,
-            settings: AgentSettings,
-            content: String,
-            senderId: String,
-        ) {
-            val intent = Intent(context, AgentService::class.java).apply {
-                putExtra(EXTRA_ACTION, ACTION_SPACEBOT)
-                putExtra(EXTRA_CONVERSATION_ID, conversationId)
-                putExtra(EXTRA_BACKEND_CONVERSATION_ID, backendConversationId)
-                putExtra(EXTRA_BASE_URL, settings.baseUrl)
-                putExtra(EXTRA_AUTH_TOKEN, settings.authToken)
-                putExtra(EXTRA_CONTENT, content)
-                putExtra(EXTRA_SENDER_ID, senderId)
             }
             context.startForegroundService(intent)
         }

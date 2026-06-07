@@ -12,11 +12,12 @@ data class AgentBackend(
 object AgentBackends {
     private val baseUrl = BuildConfig.DEFAULT_BASE_URL
 
-    val spacebot =
+    val hermes =
         AgentBackend(
-            id = "spacebot",
-            displayName = "Spacebot",
+            id = "hermes",
+            displayName = "Hermes",
             defaultBaseUrl = baseUrl,
+            defaultModel = "hermes:main",
         )
 
     val openclaw =
@@ -27,7 +28,7 @@ object AgentBackends {
             defaultModel = "openclaw:main",
         )
 
-    val supported: List<AgentBackend> = listOf(spacebot, openclaw)
+    val supported: List<AgentBackend> = listOf(hermes, openclaw)
 
-    fun fromId(id: String?): AgentBackend = supported.firstOrNull { it.id == id } ?: openclaw
+    fun fromId(id: String?): AgentBackend = supported.firstOrNull { it.id == id } ?: hermes
 }

@@ -2,14 +2,14 @@
 
 Sidekick brings your AI Assistant to your wrist. A claw should be attached to your limbs after all 🤪
 
-It's a small app for WearOS that let you interact with your Clawdbot, Openclaw, etc. through voice or text. You can start conversations, track old ones, get notified via haptics when your bot responds. It's really just meant to be a nice, clean, efficent way of summoning your clankers — with a UI that feels unobtrusive.
+It's a small app for WearOS that lets you interact with Hermes, OpenClaw, and other OpenAI-compatible agents through voice or text. You can start conversations, track old ones, get notified via haptics when your bot responds. It's really just meant to be a nice, clean, efficient way of summoning your clankers — with a UI that feels unobtrusive.
 
 I built this because I needed an "Agent Babysitter" that I could tap into, even if I was on a walk or on a train. Situations where access to a laptop or phone is either impractical or uncomfortable.
 
 ### Roadmap
 - [x] Basic UI
-- [x] Spacebot support
-- [x] Openclaw support
+- [x] Hermes support
+- [x] OpenClaw support
 - [ ] Haptics for replies
 - [ ] Voice mode quick launch
 - [ ] Tile + Complication
@@ -42,31 +42,6 @@ cd android
 bun run web:build
 bun run android:wear:build
 ```
-
-### Wear Voice Input
-
-- Voice input source is configurable in watch Settings.
-- Default source: Sarvam realtime STT.
-- Fallback source: Android speech recognizer.
-- Sarvam defaults:
-  - URL: `wss://api.sarvam.ai`
-  - model: `saaras:v3`
-  - language: `unknown`
-  - mode: `transcribe`
-  - hard cap: 20s
-- Local default token comes from `.env`:
-
-```bash
-DEFAULT_STT_AUTH_TOKEN=...
-```
-
-Sarvam transcript flow:
-
-```text
-mic -> realtime transcription preview -> Send -> agent
-```
-
-Failed sends should keep the preview visible and avoid empty conversations.
 
 ### Notes
 

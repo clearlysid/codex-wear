@@ -43,7 +43,6 @@ class ChatViewModel(
         )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
-    private val senderId = "wear-user"
     private var requestTimeoutJob: Job? = null
 
     init {
@@ -64,12 +63,6 @@ class ChatViewModel(
                         sttModeInput = if (it.sttModeInput.isEmpty()) settings.sttMode else it.sttModeInput,
                     )
                 }
-            }
-        }
-
-        viewModelScope.launch {
-            settingsRepository.themeFlow.collect { themeId ->
-                _uiState.update { it.copy(themeId = themeId) }
             }
         }
 
@@ -154,10 +147,10 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             settingsRepository.saveSettings(
-                backendId = AgentBackends.openclaw.id,
-                baseUrl = AgentBackends.openclaw.defaultBaseUrl,
+                backendId = AgentBackends.hermes.id,
+                baseUrl = AgentBackends.hermes.defaultBaseUrl,
                 authToken = BuildConfig.DEFAULT_AUTH_TOKEN,
-                model = AgentBackends.openclaw.defaultModel.orEmpty(),
+                model = AgentBackends.hermes.defaultModel.orEmpty(),
             )
             settingsRepository.saveVoiceSettings(
                 providerId = VoiceInputProviders.SARVAM,
@@ -170,13 +163,7 @@ class ChatViewModel(
             settingsRepository.saveConversationState(
                 PersistedConversationState(),
             )
-            settingsRepository.saveTheme("default")
         }
-    }
-
-    fun saveTheme(themeId: String) {
-        _uiState.update { it.copy(themeId = themeId) }
-        viewModelScope.launch { settingsRepository.saveTheme(themeId) }
     }
 
     fun openConversation(conversationId: String) {
@@ -370,10 +357,7 @@ class ChatViewModel(
         }
         persistConversationState()
 
-        when (backend.id) {
-            "openclaw" -> sendViaOpenAI(localConversationId, backendConversationId, settings)
-            else -> sendViaSpacebot(localConversationId, backendConversationId, trimmed, settings)
-        }
+        sendViaOpenAI(localConversationId, backendConversationId, settings)
         scheduleRequestTimeout()
         return true
     }
@@ -392,23 +376,6 @@ class ChatViewModel(
             AgentRequestBus.reset()
             persistConversationState()
         }
-    }
-
-    private fun sendViaSpacebot(
-        localConversationId: String,
-        backendConversationId: String,
-        content: String,
-        settings: AgentSettings,
-    ) {
-        _uiState.update { it.copy(isSending = false, isPolling = true) }
-        AgentService.startSpacebot(
-            context = context,
-            conversationId = localConversationId,
-            backendConversationId = backendConversationId,
-            settings = settings,
-            content = content,
-            senderId = senderId,
-        )
     }
 
     private fun sendViaOpenAI(localConversationId: String, backendConversationId: String, settings: AgentSettings) {
@@ -547,7 +514,6 @@ data class ChatUiState(
     val isSending: Boolean = false,
     val isPolling: Boolean = false,
     val errorMessage: String? = null,
-    val themeId: String = "default",
     val isConversationStateLoaded: Boolean = false,
 ) {
     val selectedAgentFlavorName: String

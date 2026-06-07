@@ -26,8 +26,8 @@ AI assistant app. Monorepo with `android` (Wear OS) and `web`.
 ### Architecture
 
 - OkHttp for HTTP, no Retrofit
-- Two backends: Spacebot (`SpacebotRepository`) and OpenAI-compatible (`OpenAIRepository`)
-- OpenAI backend uses SSE streaming (`sendMessageStreaming`) with `Flow<String>`
+- Backends: Hermes and OpenClaw through OpenAI-compatible `OpenAIRepository`
+- Backend uses SSE streaming (`sendMessageStreaming`) with `Flow<String>`
 - ViewModel: `ChatViewModel` — manages conversations, collects streaming chunks into UI state
 - Settings (base URL, model, auth token) stored via `SettingsRepository` (DataStore)
 - Entry point: `MainActivity` — HorizontalPager with home (chat) + settings pages

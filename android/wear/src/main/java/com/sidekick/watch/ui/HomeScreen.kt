@@ -26,7 +26,6 @@ import androidx.wear.compose.material3.Card
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
-import androidx.wear.compose.material3.IconButtonDefaults
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.SurfaceTransformation
@@ -111,11 +110,6 @@ fun HomeScreen(
                     ) {
                         FilledIconButton(
                             onClick = onNewConversationWithKeyboard,
-                            colors =
-                                IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                ),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Keyboard,
@@ -124,11 +118,6 @@ fun HomeScreen(
                         }
                         FilledIconButton(
                             onClick = onNewConversationWithVoice,
-                            colors =
-                                IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiary,
-                                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                                ),
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Mic,
