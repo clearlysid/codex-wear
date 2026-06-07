@@ -92,9 +92,14 @@ class ChatViewModel(
                             val existing = state.messagesByConversation[convId].orEmpty()
                             val withoutStreaming = existing.filter { it.id != STREAMING_MESSAGE_ID }
                             val botMsg = ChatMessage(role = MessageRole.BOT, text = requestState.finalText)
+                            val updatedConversations = updateConversationTitle(
+                                conversations = updateConversationMeta(state.conversations, convId, requestState.finalText, false),
+                                conversationId = convId,
+                                generatedTitle = requestState.generatedTitle,
+                            )
                             state.copy(
                                 messagesByConversation = state.messagesByConversation + (convId to (withoutStreaming + botMsg)),
-                                conversations = updateConversationMeta(state.conversations, convId, requestState.finalText, false),
+                                conversations = updatedConversations,
                                 isPolling = false,
                                 isSending = false,
                                 activeConversationId = null,
@@ -431,6 +436,21 @@ class ChatViewModel(
                     initialPrompt = nextPrompt,
                     lastUpdatedEpochMs = now,
                 )
+            }
+        }
+    }
+
+    private fun updateConversationTitle(
+        conversations: List<ConversationSummary>,
+        conversationId: String,
+        generatedTitle: String?,
+    ): List<ConversationSummary> {
+        val title = generatedTitle?.trim()?.takeIf { it.isNotBlank() } ?: return conversations
+        return conversations.map { conversation ->
+            if (conversation.id == conversationId && conversation.title.isNullOrBlank()) {
+                conversation.copy(title = title)
+            } else {
+                conversation
             }
         }
     }

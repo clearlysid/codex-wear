@@ -14,6 +14,7 @@ object AgentRequestBus {
         val isActive: Boolean = false,
         val streamingText: String = "",
         val finalText: String? = null,
+        val generatedTitle: String? = null,
         val error: String? = null,
     )
 

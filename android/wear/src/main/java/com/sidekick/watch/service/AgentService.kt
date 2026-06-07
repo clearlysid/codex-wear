@@ -20,13 +20,13 @@ import com.sidekick.watch.data.HttpClientProvider
 import com.sidekick.watch.data.OpenAIMessage
 import com.sidekick.watch.data.OpenAIRepository
 import com.sidekick.watch.data.ResponseNotifier
-import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.tile.SidekickTileService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -37,7 +37,7 @@ class AgentService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
-    private var titleJob: Job? = null
+    private var titleDeferred: Deferred<String?>? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -76,8 +76,7 @@ class AgentService : Service() {
         }
         requestTileUpdate()
 
-        titleJob = launchTitleGeneration(
-            conversationId = conversationId,
+        titleDeferred = generateTitleAsync(
             baseUrl = baseUrl,
             authToken = authToken,
             model = model,
@@ -98,7 +97,9 @@ class AgentService : Service() {
                     }
 
                 val finalText = buffer.toString()
-                AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText) }
+                val generatedTitle = titleDeferred?.await()
+                titleDeferred = null
+                AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText, generatedTitle = generatedTitle) }
                 onRequestComplete(finalText, conversationId)
             } catch (e: CancellationException) {
                 throw e
@@ -122,13 +123,13 @@ class AgentService : Service() {
 
     private fun onRequestFailed() {
         scope.launch {
+            titleDeferred?.cancel()
+            titleDeferred = null
             finishRequest()
         }
     }
 
     private suspend fun finishRequest() {
-        titleJob?.join()
-        titleJob = null
         requestTileUpdate()
         releaseWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -139,15 +140,14 @@ class AgentService : Service() {
         TileService.getUpdater(applicationContext).requestUpdate(SidekickTileService::class.java)
     }
 
-    private fun launchTitleGeneration(
-        conversationId: String,
+    private fun generateTitleAsync(
         baseUrl: String,
         authToken: String,
         model: String,
         userRequest: String?,
-    ): Job? {
+    ): Deferred<String?>? {
         if (userRequest.isNullOrBlank()) return null
-        return scope.launch {
+        return scope.async {
             runCatching {
                 withTimeout(TITLE_REQUEST_TIMEOUT_MS) {
                     OpenAIRepository(HttpClientProvider.client)
@@ -159,33 +159,9 @@ class AgentService : Service() {
                         )
                         .getOrThrow()
                 }
-            }.onSuccess { generatedTitle ->
-                persistTitle(generatedTitle, conversationId)
-                requestTileUpdate()
             }.onFailure { e ->
                 Log.w(TAG, "Title generation failed", e)
-            }
-        }
-    }
-
-    private suspend fun persistTitle(generatedTitle: String, conversationId: String) {
-        val title = generatedTitle.trim()
-        if (title.isBlank()) return
-        try {
-            val settingsRepo = SettingsRepository(applicationContext)
-            val persisted = settingsRepo.loadConversationState() ?: return
-            val updatedConversations = persisted.conversations.map { conv ->
-                if (conv.id == conversationId && conv.title.isNullOrBlank()) {
-                    conv.copy(title = title)
-                } else {
-                    conv
-                }
-            }
-            settingsRepo.saveConversationState(
-                persisted.copy(conversations = updatedConversations),
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to persist title", e)
+            }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
         }
     }
 
