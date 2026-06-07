@@ -22,8 +22,6 @@ import com.sidekick.watch.data.OpenAIRepository
 import com.sidekick.watch.data.ResponseNotifier
 import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.tile.SidekickTileService
-import com.sidekick.watch.viewmodel.ChatMessage
-import com.sidekick.watch.viewmodel.MessageRole
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -118,7 +116,6 @@ class AgentService : Service() {
             ResponseNotifier(applicationContext).notifyIfInBackground(responseText)
         }
         scope.launch {
-            persistResponse(responseText, conversationId)
             finishRequest()
         }
     }
@@ -140,33 +137,6 @@ class AgentService : Service() {
 
     private fun requestTileUpdate() {
         TileService.getUpdater(applicationContext).requestUpdate(SidekickTileService::class.java)
-    }
-
-    private suspend fun persistResponse(responseText: String, conversationId: String) {
-        if (responseText.isBlank()) return
-        try {
-            val settingsRepo = SettingsRepository(applicationContext)
-            val persisted = settingsRepo.loadConversationState() ?: return
-            val existingMessages = persisted.messagesByConversation[conversationId].orEmpty()
-            val botMessage = com.sidekick.watch.data.PersistedChatMessage(
-                id = java.util.UUID.randomUUID().toString(),
-                role = MessageRole.BOT.name,
-                text = responseText,
-            )
-            val updatedMessages = persisted.messagesByConversation + (conversationId to (existingMessages + botMessage))
-            val now = System.currentTimeMillis()
-            val updatedConversations = persisted.conversations.map { conv ->
-                if (conv.id == conversationId) conv.copy(lastUpdatedEpochMs = now) else conv
-            }
-            settingsRepo.saveConversationState(
-                persisted.copy(
-                    messagesByConversation = updatedMessages,
-                    conversations = updatedConversations,
-                )
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to persist response", e)
-        }
     }
 
     private fun launchTitleGeneration(
