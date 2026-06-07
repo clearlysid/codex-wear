@@ -84,7 +84,7 @@ class AgentService : Service() {
             userRequest = titleUserRequest,
         )
 
-        scope.launch {
+        scope.launch(Dispatchers.Default) {
             try {
                 val messages = deserializeMessages(messagesJson)
                 val repo = OpenAIRepository(HttpClientProvider.client)
@@ -153,7 +153,7 @@ class AgentService : Service() {
         userRequest: String?,
     ): Deferred<String?>? {
         if (userRequest.isNullOrBlank()) return null
-        return scope.async {
+        return scope.async(Dispatchers.Default) {
             runCatching {
                 withTimeout(TITLE_REQUEST_TIMEOUT_MS) {
                     OpenAIRepository(HttpClientProvider.client)
