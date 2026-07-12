@@ -18,6 +18,7 @@ local.properties
 
 # Secrets
 .env
+.env.codex
 
 # Android release artifacts
 android/**/release/

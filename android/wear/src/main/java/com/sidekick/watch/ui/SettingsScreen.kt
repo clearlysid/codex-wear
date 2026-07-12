@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -44,6 +47,7 @@ import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 import androidx.wear.compose.material3.lazy.transformedHeight
 import com.sidekick.watch.data.AgentBackends
+import com.sidekick.watch.data.AgentModelOption
 import com.sidekick.watch.data.VoiceInputProviders
 
 @Composable
@@ -52,12 +56,15 @@ fun SettingsScreen(
     selectedAgentFlavorName: String,
     baseUrl: String,
     model: String,
+    modelOptions: List<AgentModelOption>,
+    instructions: String,
     authToken: String,
     voiceInputProviderId: String,
     sttAuthToken: String,
     onSaveAgentFlavor: (String) -> Unit,
     onSaveBaseUrl: (String) -> Unit,
     onSaveModel: (String) -> Unit,
+    onSaveInstructions: (String) -> Unit,
     onSaveAuthToken: (String) -> Unit,
     onSaveVoiceInputProvider: (String) -> Unit,
     onSaveSttAuthToken: (String) -> Unit,
@@ -135,11 +142,29 @@ fun SettingsScreen(
                     ) {
                         Text("Model", style = MaterialTheme.typography.labelSmall)
                         Text(
-                            text = model.ifBlank { "default" },
+                            text = modelDisplayName(model, modelOptions),
                             style = MaterialTheme.typography.bodyExtraSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
+                    }
+                }
+
+                if (selectedAgentFlavorId == AgentBackends.codex.id) {
+                    item {
+                        Card(
+                            onClick = { dialog = SettingDialog.Instructions },
+                            modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
+                            transformation = SurfaceTransformation(transformationSpec),
+                        ) {
+                            Text("Instructions", style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                text = instructions.ifBlank { "none" },
+                                style = MaterialTheme.typography.bodyExtraSmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
 
@@ -248,14 +273,41 @@ fun SettingsScreen(
             }
 
             SettingDialog.Model -> {
+                if (modelOptions.isEmpty()) {
+                    TextSettingDialog(
+                        title = "Model",
+                        initialValue = model,
+                        keyboardType = KeyboardType.Text,
+                        placeholder = "model name",
+                        onCancel = { dialog = null },
+                        onSave = { value ->
+                            onSaveModel(value)
+                            dialog = null
+                        },
+                    )
+                } else {
+                    ModelDialog(
+                        options = modelOptions,
+                        initialSelection = model,
+                        onCancel = { dialog = null },
+                        onSave = { value ->
+                            onSaveModel(value)
+                            dialog = null
+                        },
+                    )
+                }
+            }
+
+            SettingDialog.Instructions -> {
                 TextSettingDialog(
-                    title = "Model",
-                    initialValue = model,
+                    title = "Instructions",
+                    initialValue = instructions,
                     keyboardType = KeyboardType.Text,
-                    placeholder = "model name",
+                    placeholder = "How should Codex respond?",
+                    singleLine = false,
                     onCancel = { dialog = null },
                     onSave = { value ->
-                        onSaveModel(value)
+                        onSaveInstructions(value)
                         dialog = null
                     },
                 )
@@ -396,11 +448,67 @@ private fun AgentFlavorDialog(
 }
 
 @Composable
+private fun ModelDialog(
+    options: List<AgentModelOption>,
+    initialSelection: String,
+    onCancel: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var selected by remember(initialSelection, options) {
+        mutableStateOf(initialSelection.takeIf { value -> options.any { it.id == value } }.orEmpty())
+    }
+
+    AlertDialog(
+        visible = true,
+        onDismissRequest = onCancel,
+        title = { Text("Model", style = MaterialTheme.typography.titleSmall) },
+        text = {
+            Column(
+                modifier =
+                    Modifier
+                        .heightIn(max = 180.dp)
+                        .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                options.forEach { option ->
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { selected = option.id }
+                                .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (selected == option.id) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
+                            contentDescription = null,
+                        )
+                        Text(option.displayName, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            FilledIconButton(onClick = { onSave(selected) }) {
+                Icon(Icons.Filled.Check, contentDescription = "Save")
+            }
+        },
+        dismissButton = {
+            FilledIconButton(onClick = onCancel) {
+                Icon(Icons.Filled.Close, contentDescription = "Cancel")
+            }
+        },
+    )
+}
+
+@Composable
 private fun TextSettingDialog(
     title: String,
     initialValue: String,
     keyboardType: KeyboardType,
     placeholder: String,
+    singleLine: Boolean = true,
     onCancel: () -> Unit,
     onSave: (String) -> Unit,
 ) {
@@ -416,6 +524,7 @@ private fun TextSettingDialog(
                 onValueChange = { value = it },
                 keyboardType = keyboardType,
                 placeholder = placeholder,
+                singleLine = singleLine,
             )
         },
         confirmButton = {
@@ -443,6 +552,7 @@ private fun InputField(
     onValueChange: (String) -> Unit,
     keyboardType: KeyboardType,
     placeholder: String,
+    singleLine: Boolean,
 ) {
     val shape = RoundedCornerShape(14.dp)
     val colors = MaterialTheme.colorScheme
@@ -450,7 +560,8 @@ private fun InputField(
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        singleLine = true,
+        singleLine = singleLine,
+        maxLines = if (singleLine) 1 else 4,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         textStyle = MaterialTheme.typography.bodySmall.copy(color = colors.onSurface),
         cursorBrush = SolidColor(colors.primary),
@@ -482,6 +593,9 @@ private fun maskToken(token: String): String {
     val prefix = token.take(4)
     return prefix + "*".repeat(token.length - 4)
 }
+
+private fun modelDisplayName(model: String, options: List<AgentModelOption>): String =
+    options.firstOrNull { it.id == model }?.displayName ?: model.ifBlank { "Default" }
 
 @Composable
 private fun VoiceInputProviderDialog(
@@ -543,6 +657,7 @@ private enum class SettingDialog {
     AgentFlavor,
     BaseUrl,
     Model,
+    Instructions,
     AuthToken,
     VoiceInputProvider,
     SttAuthToken,

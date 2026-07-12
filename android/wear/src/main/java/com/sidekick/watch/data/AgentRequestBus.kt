@@ -9,6 +9,8 @@ object AgentRequestBus {
 
     data class RequestState(
         val conversationId: String? = null,
+        val backendId: String? = null,
+        val backendConversationId: String? = null,
         val isActive: Boolean = false,
         val streamingText: String = "",
         val finalText: String? = null,

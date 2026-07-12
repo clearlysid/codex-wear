@@ -6,9 +6,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val envFile = rootProject.projectDir.resolve("../.env")
 val envProps = Properties().apply {
-    if (envFile.exists()) envFile.inputStream().use { load(it) }
+    listOf("../.env", "../.env.codex").forEach { path ->
+        rootProject.projectDir.resolve(path).takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
 }
 
 android {
@@ -36,6 +37,8 @@ android {
         versionName = "1.0"
         buildConfigField("String", "DEFAULT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_AUTH_TOKEN", "")}\"")
         buildConfigField("String", "DEFAULT_BASE_URL", "\"${envProps.getProperty("DEFAULT_BASE_URL", "")}\"")
+        buildConfigField("String", "DEFAULT_CODEX_BASE_URL", "\"${envProps.getProperty("DEFAULT_CODEX_BASE_URL", "wss://donna.catfish-basilisk.ts.net/codex")}\"")
+        buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_CODEX_AUTH_TOKEN", "")}\"")
         buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_STT_AUTH_TOKEN", "")}\"")
     }
 

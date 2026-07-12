@@ -7,8 +7,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sidekick.watch.BuildConfig
 import com.sidekick.watch.data.AgentBackends
+import com.sidekick.watch.data.AgentBackendProtocol
 import com.sidekick.watch.data.AgentRequestBus
 import com.sidekick.watch.data.AgentSettings
+import com.sidekick.watch.data.DEFAULT_WATCH_INSTRUCTIONS
 import com.sidekick.watch.data.PersistedChatMessage
 import com.sidekick.watch.data.PersistedConversationState
 import com.sidekick.watch.data.PersistedConversationSummary
@@ -51,6 +53,7 @@ class ChatViewModel(
                         baseUrlInput = if (it.baseUrlInput.isEmpty()) settings.baseUrl else it.baseUrlInput,
                         authTokenInput = if (it.authTokenInput.isEmpty()) settings.authToken else it.authTokenInput,
                         modelInput = if (it.modelInput.isEmpty()) settings.model else it.modelInput,
+                        instructionsInput = if (it.instructionsInput.isEmpty()) settings.instructions else it.instructionsInput,
                         voiceInputProviderId = settings.voiceInputProviderId,
                         sttBaseUrlInput = if (it.sttBaseUrlInput.isEmpty()) settings.sttBaseUrl else it.sttBaseUrlInput,
                         sttAuthTokenInput = if (it.sttAuthTokenInput.isEmpty()) settings.sttAuthToken else it.sttAuthTokenInput,
@@ -78,55 +81,76 @@ class ChatViewModel(
             }
             _uiState.update { it.copy(isConversationStateLoaded = true) }
 
+            if (AgentRequestBus.state.value.isActive && !AgentService.isRunning()) {
+                AgentRequestBus.updateState {
+                    it.copy(isActive = false, error = "Previous request interrupted")
+                }
+            }
+
             AgentRequestBus.state.collect { requestState ->
                 val convId = requestState.conversationId ?: return@collect
                 _uiState.update { state ->
+                    val stateWithBackendId =
+                        requestState.backendConversationId?.let { backendId ->
+                            val key = backendConversationKey(requestState.backendId.orEmpty(), convId)
+                            state.copy(
+                                backendConversationIds = state.backendConversationIds + (key to backendId),
+                            )
+                        } ?: state
                     when {
-                        requestState.error != null -> state.copy(
+                        requestState.error != null -> stateWithBackendId.copy(
                             isPolling = false,
                             isSending = false,
                             activeConversationId = null,
                             errorMessage = requestState.error,
                         )
                         requestState.finalText != null -> {
-                            val existing = state.messagesByConversation[convId].orEmpty()
+                            val existing = stateWithBackendId.messagesByConversation[convId].orEmpty()
                             val withoutStreaming = existing.filter { it.id != STREAMING_MESSAGE_ID }
                             val botMsg = ChatMessage(role = MessageRole.BOT, text = requestState.finalText)
+                            val completedMessages =
+                                if (withoutStreaming.lastOrNull()?.let {
+                                        it.role == MessageRole.BOT && it.text == requestState.finalText
+                                    } == true
+                                ) {
+                                    withoutStreaming
+                                } else {
+                                    withoutStreaming + botMsg
+                                }
                             val updatedConversations = updateConversationTitle(
-                                conversations = updateConversationMeta(state.conversations, convId, requestState.finalText, false),
+                                conversations = updateConversationMeta(stateWithBackendId.conversations, convId, requestState.finalText, false),
                                 conversationId = convId,
                                 generatedTitle = requestState.generatedTitle,
                             )
-                            state.copy(
-                                messagesByConversation = state.messagesByConversation + (convId to (withoutStreaming + botMsg)),
+                            stateWithBackendId.copy(
+                                messagesByConversation = stateWithBackendId.messagesByConversation + (convId to completedMessages),
                                 conversations = updatedConversations,
                                 isPolling = false,
                                 isSending = false,
                                 activeConversationId = null,
                             )
                         }
-                        requestState.generatedTitle != null -> state.copy(
+                        requestState.generatedTitle != null -> stateWithBackendId.copy(
                             conversations = updateConversationTitle(
-                                conversations = state.conversations,
+                                conversations = stateWithBackendId.conversations,
                                 conversationId = convId,
                                 generatedTitle = requestState.generatedTitle,
                             ),
                         )
                         requestState.isActive && requestState.streamingText.isNotEmpty() -> {
-                            val existing = state.messagesByConversation[convId].orEmpty()
+                            val existing = stateWithBackendId.messagesByConversation[convId].orEmpty()
                             val withoutStreaming = existing.filter { it.id != STREAMING_MESSAGE_ID }
                             val streamingMsg = ChatMessage(id = STREAMING_MESSAGE_ID, role = MessageRole.BOT, text = requestState.streamingText)
-                            state.copy(
-                                messagesByConversation = state.messagesByConversation + (convId to (withoutStreaming + streamingMsg)),
+                            stateWithBackendId.copy(
+                                messagesByConversation = stateWithBackendId.messagesByConversation + (convId to (withoutStreaming + streamingMsg)),
                                 activeConversationId = convId,
                             )
                         }
-                        else -> state
+                        else -> stateWithBackendId
                     }
                 }
                 if (requestState.finalText != null || requestState.generatedTitle != null || requestState.error != null) {
                     persistConversationState()
-                    AgentRequestBus.reset()
                 }
             }
         }
@@ -144,7 +168,10 @@ class ChatViewModel(
                 conversations = updated,
                 selectedConversationId = newSelected,
                 messagesByConversation = state.messagesByConversation - conversationId,
-                backendConversationIds = state.backendConversationIds - conversationId,
+                backendConversationIds =
+                    state.backendConversationIds.filterKeys { key ->
+                        key != conversationId && !key.endsWith(":$conversationId")
+                    },
             )
         }
         persistConversationState()
@@ -156,10 +183,11 @@ class ChatViewModel(
         }
         viewModelScope.launch {
             settingsRepository.saveSettings(
-                backendId = AgentBackends.hermes.id,
-                baseUrl = AgentBackends.hermes.defaultBaseUrl,
-                authToken = BuildConfig.DEFAULT_AUTH_TOKEN,
-                model = AgentBackends.hermes.defaultModel.orEmpty(),
+                backendId = AgentBackends.codex.id,
+                baseUrl = AgentBackends.codex.defaultBaseUrl,
+                authToken = BuildConfig.DEFAULT_CODEX_AUTH_TOKEN,
+                model = AgentBackends.codex.defaultModel.orEmpty(),
+                instructions = DEFAULT_WATCH_INSTRUCTIONS,
             )
             settingsRepository.saveVoiceSettings(
                 providerId = VoiceInputProviders.SARVAM,
@@ -203,7 +231,7 @@ class ChatViewModel(
                 conversations = listOf(newConversation) + state.conversations,
                 selectedConversationId = newConversation.id,
                 messagesByConversation = state.messagesByConversation + (newConversation.id to emptyList()),
-                backendConversationIds = state.backendConversationIds + (newConversation.id to UUID.randomUUID().toString()),
+                backendConversationIds = state.backendConversationIds,
                 errorMessage = null,
             )
         }
@@ -213,30 +241,25 @@ class ChatViewModel(
     }
 
     fun saveAgentFlavor(backendId: String) {
-        _uiState.update { state ->
-            val currentBackend = AgentBackends.fromId(state.agentFlavorInput)
-            val nextBackend = AgentBackends.fromId(backendId)
-            val normalizedBaseUrl = state.baseUrlInput.trim().trimEnd('/')
-            val nextBaseUrl =
-                when {
-                    state.baseUrlInput.isBlank() -> nextBackend.defaultBaseUrl
-                    normalizedBaseUrl == currentBackend.defaultBaseUrl -> nextBackend.defaultBaseUrl
-                    else -> state.baseUrlInput
-                }
-            val nextModel =
-                when {
-                    state.modelInput.isBlank() -> nextBackend.defaultModel.orEmpty()
-                    state.modelInput.trim() == currentBackend.defaultModel.orEmpty() -> nextBackend.defaultModel.orEmpty()
-                    else -> state.modelInput
-                }
-
-            state.copy(
-                agentFlavorInput = nextBackend.id,
-                baseUrlInput = nextBaseUrl,
-                modelInput = nextModel,
+        viewModelScope.launch {
+            val next = settingsRepository.loadBackendSettings(backendId)
+            _uiState.update {
+                it.copy(
+                    agentFlavorInput = next.backendId,
+                    baseUrlInput = next.baseUrl,
+                    authTokenInput = next.authToken,
+                    modelInput = next.model,
+                    instructionsInput = next.instructions,
+                )
+            }
+            settingsRepository.saveSettings(
+                backendId = next.backendId,
+                baseUrl = next.baseUrl,
+                authToken = next.authToken,
+                model = next.model,
+                instructions = next.instructions,
             )
         }
-        persistCurrentSettings()
     }
 
     fun saveBaseUrl(baseUrl: String) {
@@ -251,6 +274,11 @@ class ChatViewModel(
 
     fun saveModel(model: String) {
         _uiState.update { it.copy(modelInput = model) }
+        persistCurrentSettings()
+    }
+
+    fun saveInstructions(instructions: String) {
+        _uiState.update { it.copy(instructionsInput = instructions) }
         persistCurrentSettings()
     }
 
@@ -292,6 +320,7 @@ class ChatViewModel(
                 baseUrl = state.baseUrlInput,
                 authToken = state.authTokenInput,
                 model = state.modelInput,
+                instructions = state.instructionsInput,
             )
             _uiState.update { it.copy(errorMessage = null) }
         }
@@ -342,11 +371,19 @@ class ChatViewModel(
             return false
         }
 
-        val backendConversationId = state.backendConversationIds[localConversationId] ?: UUID.randomUUID().toString()
-        if (!state.backendConversationIds.containsKey(localConversationId)) {
-            _uiState.update {
-                it.copy(backendConversationIds = it.backendConversationIds + (localConversationId to backendConversationId))
-            }
+        val backendKey = backendConversationKey(backend.id, localConversationId)
+        val existingBackendConversationId =
+            state.backendConversationIds[backendKey]
+                ?: if (backend.protocol == AgentBackendProtocol.OPENAI_CHAT) {
+                    state.backendConversationIds[localConversationId]
+                } else {
+                    null
+                }
+        val backendConversationId =
+            existingBackendConversationId
+                ?: if (backend.protocol == AgentBackendProtocol.OPENAI_CHAT) UUID.randomUUID().toString() else null
+        if (backendConversationId != null && existingBackendConversationId == null) {
+            _uiState.update { it.copy(backendConversationIds = it.backendConversationIds + (backendKey to backendConversationId)) }
         }
         val shouldGenerateTitle =
             state.conversations.firstOrNull { it.id == localConversationId }?.let {
@@ -372,12 +409,26 @@ class ChatViewModel(
         }
         persistConversationState()
 
-        sendViaOpenAI(
-            localConversationId = localConversationId,
-            backendConversationId = backendConversationId,
-            settings = settings,
-            titleUserRequest = if (shouldGenerateTitle) trimmed else null,
-        )
+        when (backend.protocol) {
+            AgentBackendProtocol.OPENAI_CHAT ->
+                sendViaOpenAI(
+                    localConversationId = localConversationId,
+                    backendConversationId = requireNotNull(backendConversationId),
+                    settings = settings,
+                    titleUserRequest = if (shouldGenerateTitle) trimmed else null,
+                )
+            AgentBackendProtocol.CODEX_APP_SERVER -> {
+                _uiState.update { it.copy(isSending = false, isPolling = true, activeConversationId = localConversationId) }
+                AgentService.startCodex(
+                    context = context,
+                    conversationId = localConversationId,
+                    backendConversationId = backendConversationId,
+                    settings = settings,
+                    cwd = requireNotNull(backend.defaultCwd),
+                    input = trimmed,
+                )
+            }
+        }
         return true
     }
 
@@ -474,6 +525,9 @@ class ChatViewModel(
 
     companion object {
         private const val STREAMING_MESSAGE_ID = "__streaming__"
+
+        private fun backendConversationKey(backendId: String, conversationId: String): String =
+            "$backendId:$conversationId"
     }
 }
 
@@ -530,6 +584,7 @@ data class ChatUiState(
     val baseUrlInput: String = "",
     val authTokenInput: String = "",
     val modelInput: String = "",
+    val instructionsInput: String = "",
     val voiceInputProviderId: String = "",
     val sttBaseUrlInput: String = "",
     val sttAuthTokenInput: String = "",
@@ -544,6 +599,9 @@ data class ChatUiState(
 ) {
     val selectedAgentFlavorName: String
         get() = AgentBackends.fromId(agentFlavorInput).displayName
+
+    val modelOptions
+        get() = AgentBackends.fromId(agentFlavorInput).modelOptions
 
     val activeAgentName: String
         get() = AgentBackends.fromId(savedSettings.backendId).displayName

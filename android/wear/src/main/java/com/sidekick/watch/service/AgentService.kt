@@ -15,8 +15,11 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.wear.tiles.TileService
 import com.sidekick.watch.R
+import com.sidekick.watch.data.AgentBackends
 import com.sidekick.watch.data.AgentRequestBus
 import com.sidekick.watch.data.AgentSettings
+import com.sidekick.watch.data.CodexAppServerRepository
+import com.sidekick.watch.data.CodexStreamEvent
 import com.sidekick.watch.data.HttpClientProvider
 import com.sidekick.watch.data.OpenAIMessage
 import com.sidekick.watch.data.OpenAIRepository
@@ -29,7 +32,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -43,6 +49,12 @@ class AgentService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var titleDeferred: Deferred<String?>? = null
+    private var requestJob: Job? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        serviceRunning = true
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -51,7 +63,7 @@ class AgentService : Service() {
             stopSelf(); return START_NOT_STICKY
         }
 
-        if (AgentRequestBus.state.value.isActive) {
+        if (requestJob?.isActive == true) {
             Log.w(TAG, "Request already active, ignoring")
             return START_NOT_STICKY
         }
@@ -61,10 +73,91 @@ class AgentService : Service() {
 
         when (action) {
             ACTION_OPENAI -> launchOpenAI(intent)
+            ACTION_CODEX -> launchCodex(intent)
             else -> stopSelf()
         }
 
         return START_NOT_STICKY
+    }
+
+    private fun launchCodex(intent: Intent) {
+        val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID)!!
+        val backendConversationId = intent.getStringExtra(EXTRA_BACKEND_CONVERSATION_ID)
+        val baseUrl = intent.getStringExtra(EXTRA_BASE_URL)!!
+        val authToken = intent.getStringExtra(EXTRA_AUTH_TOKEN).orEmpty()
+        val model = intent.getStringExtra(EXTRA_MODEL).orEmpty()
+        val developerInstructions = intent.getStringExtra(EXTRA_DEVELOPER_INSTRUCTIONS).orEmpty()
+        val cwd = intent.getStringExtra(EXTRA_CWD)!!
+        val input = intent.getStringExtra(EXTRA_INPUT)!!
+
+        AgentRequestBus.updateState {
+            it.copy(
+                conversationId = conversationId,
+                backendId = AgentBackends.codex.id,
+                backendConversationId = backendConversationId,
+                isActive = true,
+                streamingText = "",
+                finalText = null,
+                generatedTitle = null,
+                error = null,
+            )
+        }
+        requestTileUpdate()
+
+        requestJob = scope.launch(Dispatchers.Default) {
+            try {
+                val repo = CodexAppServerRepository(HttpClientProvider.client)
+                val buffer = StringBuilder()
+                var lastStreamUpdateMs = 0L
+
+                withTimeout(CODEX_TURN_TIMEOUT_MS) {
+                    repo.runTurn(
+                        baseUrl,
+                        authToken,
+                        model,
+                        developerInstructions,
+                        cwd,
+                        backendConversationId,
+                        input,
+                    )
+                        .collect { event ->
+                            when (event) {
+                                is CodexStreamEvent.ThreadReady -> {
+                                    AgentRequestBus.updateState { it.copy(backendConversationId = event.threadId) }
+                                    persistBackendConversationId(AgentBackends.codex.id, conversationId, event.threadId)
+                                }
+                                is CodexStreamEvent.TextDelta -> {
+                                    buffer.append(event.text)
+                                    val now = SystemClock.elapsedRealtime()
+                                    if (now - lastStreamUpdateMs >= STREAM_UPDATE_INTERVAL_MS) {
+                                        lastStreamUpdateMs = now
+                                        AgentRequestBus.updateState { it.copy(streamingText = buffer.toString()) }
+                                    }
+                                }
+                                CodexStreamEvent.Completed -> Unit
+                            }
+                        }
+                }
+
+                val finalText = buffer.toString()
+                Log.i(TAG, "Codex request completed conversation=$conversationId chars=${finalText.length}")
+                AgentRequestBus.updateState { it.copy(isActive = false, finalText = finalText) }
+                persistResponse(conversationId, finalText, null)
+                onRequestComplete(finalText, conversationId)
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Codex request timed out", e)
+                AgentRequestBus.updateState { it.copy(isActive = false, error = "Codex request timed out") }
+                onRequestFailed()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Codex request failed", e)
+                AgentRequestBus.updateState { it.copy(isActive = false, error = e.message ?: "Request failed") }
+                onRequestFailed()
+            } finally {
+                clearInterruptedRequest(conversationId)
+            }
+        }
     }
 
     private fun launchOpenAI(intent: Intent) {
@@ -77,7 +170,15 @@ class AgentService : Service() {
         val titleUserRequest = intent.getStringExtra(EXTRA_TITLE_USER_REQUEST)
 
         AgentRequestBus.updateState {
-            it.copy(conversationId = conversationId, isActive = true, streamingText = "", finalText = null, error = null)
+            it.copy(
+                conversationId = conversationId,
+                backendId = intent.getStringExtra(EXTRA_BACKEND_ID),
+                isActive = true,
+                streamingText = "",
+                finalText = null,
+                generatedTitle = null,
+                error = null,
+            )
         }
         requestTileUpdate()
 
@@ -88,7 +189,7 @@ class AgentService : Service() {
             userRequest = titleUserRequest,
         )
 
-        scope.launch(Dispatchers.Default) {
+        requestJob = scope.launch(Dispatchers.Default) {
             try {
                 val messages = deserializeMessages(messagesJson)
                 val repo = OpenAIRepository(HttpClientProvider.client)
@@ -115,8 +216,20 @@ class AgentService : Service() {
                 Log.e(TAG, "OpenAI request failed", e)
                 AgentRequestBus.updateState { it.copy(isActive = false, error = e.message ?: "Request failed") }
                 onRequestFailed()
+            } finally {
+                clearInterruptedRequest(conversationId)
             }
         }
+    }
+
+    private suspend fun clearInterruptedRequest(conversationId: String) {
+        val state = AgentRequestBus.state.value
+        if (!state.isActive || state.conversationId != conversationId) return
+        Log.w(TAG, "Request interrupted conversation=$conversationId")
+        AgentRequestBus.updateState {
+            it.copy(isActive = false, error = "Request interrupted")
+        }
+        withContext(NonCancellable) { finishRequest() }
     }
 
     private fun onRequestComplete(responseText: String, conversationId: String) {
@@ -235,6 +348,17 @@ class AgentService : Service() {
         )
     }
 
+    private suspend fun persistBackendConversationId(backendId: String, conversationId: String, threadId: String) {
+        val repository = SettingsRepository(applicationContext)
+        val current = repository.loadConversationState() ?: return
+        repository.saveConversationState(
+            current.copy(
+                backendConversationIds =
+                    current.backendConversationIds + (backendConversationKey(backendId, conversationId) to threadId),
+            ),
+        )
+    }
+
     private fun vibrateResponse() {
         val vibrator = getSystemService(VibratorManager::class.java)?.defaultVibrator ?: return
         vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 100, 50, 100), -1))
@@ -269,6 +393,14 @@ class AgentService : Service() {
     }
 
     override fun onDestroy() {
+        val state = AgentRequestBus.state.value
+        if (state.isActive) {
+            Log.w(TAG, "Service destroyed during active request conversation=${state.conversationId}")
+            AgentRequestBus.updateState {
+                it.copy(isActive = false, error = "Request interrupted")
+            }
+        }
+        serviceRunning = false
         scope.cancel()
         releaseWakeLock()
         super.onDestroy()
@@ -281,15 +413,24 @@ class AgentService : Service() {
 
         private const val EXTRA_ACTION = "action"
         private const val ACTION_OPENAI = "openai"
+        private const val ACTION_CODEX = "codex"
         private const val EXTRA_CONVERSATION_ID = "conversation_id"
+        private const val EXTRA_BACKEND_ID = "backend_id"
         private const val EXTRA_BACKEND_CONVERSATION_ID = "backend_conversation_id"
         private const val EXTRA_BASE_URL = "base_url"
         private const val EXTRA_AUTH_TOKEN = "auth_token"
         private const val EXTRA_MODEL = "model"
+        private const val EXTRA_DEVELOPER_INSTRUCTIONS = "developer_instructions"
         private const val EXTRA_MESSAGES_JSON = "messages_json"
         private const val EXTRA_TITLE_USER_REQUEST = "title_user_request"
+        private const val EXTRA_CWD = "cwd"
+        private const val EXTRA_INPUT = "input"
         private const val TITLE_REQUEST_TIMEOUT_MS = 10_000L
+        private const val CODEX_TURN_TIMEOUT_MS = 5 * 60 * 1000L
         private const val STREAM_UPDATE_INTERVAL_MS = 150L
+        @Volatile private var serviceRunning = false
+
+        fun isRunning(): Boolean = serviceRunning
 
         fun startOpenAI(
             context: Context,
@@ -302,6 +443,7 @@ class AgentService : Service() {
             val intent = Intent(context, AgentService::class.java).apply {
                 putExtra(EXTRA_ACTION, ACTION_OPENAI)
                 putExtra(EXTRA_CONVERSATION_ID, conversationId)
+                putExtra(EXTRA_BACKEND_ID, settings.backendId)
                 putExtra(EXTRA_BACKEND_CONVERSATION_ID, backendConversationId)
                 putExtra(EXTRA_BASE_URL, settings.baseUrl)
                 putExtra(EXTRA_AUTH_TOKEN, settings.authToken)
@@ -314,6 +456,31 @@ class AgentService : Service() {
             context.startForegroundService(intent)
         }
 
+        fun startCodex(
+            context: Context,
+            conversationId: String,
+            backendConversationId: String?,
+            settings: AgentSettings,
+            cwd: String,
+            input: String,
+        ) {
+            val intent = Intent(context, AgentService::class.java).apply {
+                putExtra(EXTRA_ACTION, ACTION_CODEX)
+                putExtra(EXTRA_CONVERSATION_ID, conversationId)
+                putExtra(EXTRA_BACKEND_ID, settings.backendId)
+                if (!backendConversationId.isNullOrBlank()) {
+                    putExtra(EXTRA_BACKEND_CONVERSATION_ID, backendConversationId)
+                }
+                putExtra(EXTRA_BASE_URL, settings.baseUrl)
+                putExtra(EXTRA_AUTH_TOKEN, settings.authToken)
+                putExtra(EXTRA_MODEL, settings.model)
+                putExtra(EXTRA_DEVELOPER_INSTRUCTIONS, settings.instructions)
+                putExtra(EXTRA_CWD, cwd)
+                putExtra(EXTRA_INPUT, input)
+            }
+            context.startForegroundService(intent)
+        }
+
         private fun deserializeMessages(json: String): List<OpenAIMessage> {
             val array = JSONArray(json)
             return (0 until array.length()).map { i ->
@@ -321,5 +488,8 @@ class AgentService : Service() {
                 OpenAIMessage(role = obj.getString("role"), content = obj.getString("content"))
             }
         }
+
+        private fun backendConversationKey(backendId: String, conversationId: String): String =
+            "$backendId:$conversationId"
     }
 }

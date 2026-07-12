@@ -22,10 +22,11 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 private val json = Json { ignoreUnknownKeys = true }
 
 data class AgentSettings(
-    val backendId: String = AgentBackends.hermes.id,
-    val baseUrl: String = AgentBackends.hermes.defaultBaseUrl,
-    val authToken: String = BuildConfig.DEFAULT_AUTH_TOKEN,
-    val model: String = AgentBackends.hermes.defaultModel.orEmpty(),
+    val backendId: String = AgentBackends.codex.id,
+    val baseUrl: String = AgentBackends.codex.defaultBaseUrl,
+    val authToken: String = BuildConfig.DEFAULT_CODEX_AUTH_TOKEN,
+    val model: String = AgentBackends.codex.defaultModel.orEmpty(),
+    val instructions: String = DEFAULT_WATCH_INSTRUCTIONS,
     val voiceInputProviderId: String = VoiceInputProviders.SARVAM,
     val sttBaseUrl: String = VoiceInputProviders.SARVAM_BASE_URL,
     val sttAuthToken: String = BuildConfig.DEFAULT_STT_AUTH_TOKEN,
@@ -33,6 +34,9 @@ data class AgentSettings(
     val sttLanguageCode: String = "unknown",
     val sttMode: String = "transcribe",
 )
+
+const val DEFAULT_WATCH_INSTRUCTIONS =
+    "You are being addressed from a watch. Keep answers short and crisp. Do not use headings, long paragraphs, or complex formatting."
 
 object VoiceInputProviders {
     const val SARVAM = "sarvam"
@@ -53,21 +57,16 @@ class SettingsRepository(private val context: Context) {
             }
             .map { prefs ->
                 val backend = AgentBackends.fromId(prefs[BACKEND_ID_KEY])
-                AgentSettings(
-                    backendId = backend.id,
-                    baseUrl = prefs[BASE_URL_KEY]?.ifBlank { backend.defaultBaseUrl } ?: backend.defaultBaseUrl,
-                    authToken = prefs[AUTH_TOKEN_KEY]?.ifBlank { BuildConfig.DEFAULT_AUTH_TOKEN } ?: BuildConfig.DEFAULT_AUTH_TOKEN,
-                    model = prefs[MODEL_KEY]?.ifBlank { backend.defaultModel.orEmpty() } ?: backend.defaultModel.orEmpty(),
-                    voiceInputProviderId = prefs[VOICE_INPUT_PROVIDER_KEY] ?: VoiceInputProviders.SARVAM,
-                    sttBaseUrl = prefs[STT_BASE_URL_KEY]?.ifBlank { VoiceInputProviders.SARVAM_BASE_URL } ?: VoiceInputProviders.SARVAM_BASE_URL,
-                    sttAuthToken = prefs[STT_AUTH_TOKEN_KEY]?.ifBlank { BuildConfig.DEFAULT_STT_AUTH_TOKEN } ?: BuildConfig.DEFAULT_STT_AUTH_TOKEN,
-                    sttModel = prefs[STT_MODEL_KEY]?.ifBlank { "saaras:v3" } ?: "saaras:v3",
-                    sttLanguageCode = prefs[STT_LANGUAGE_CODE_KEY]?.ifBlank { "unknown" } ?: "unknown",
-                    sttMode = prefs[STT_MODE_KEY]?.ifBlank { "transcribe" } ?: "transcribe",
-                )
+                settingsFromPreferences(prefs, backend, allowLegacy = true)
             }
 
-    suspend fun saveSettings(backendId: String, baseUrl: String, authToken: String, model: String) {
+    suspend fun saveSettings(
+        backendId: String,
+        baseUrl: String,
+        authToken: String,
+        model: String,
+        instructions: String,
+    ) {
         context.dataStore.edit { prefs ->
             val backend = AgentBackends.fromId(backendId)
             val normalizedBaseUrl = normalizeBaseUrl(baseUrl).ifBlank { backend.defaultBaseUrl }
@@ -75,7 +74,27 @@ class SettingsRepository(private val context: Context) {
             prefs[BASE_URL_KEY] = normalizedBaseUrl
             prefs[AUTH_TOKEN_KEY] = authToken.trim()
             prefs[MODEL_KEY] = model.trim().ifBlank { backend.defaultModel.orEmpty() }
+            prefs[INSTRUCTIONS_KEY] = instructions.trim()
+            prefs[backendBaseUrlKey(backend.id)] = normalizedBaseUrl
+            prefs[backendAuthTokenKey(backend.id)] = authToken.trim()
+            prefs[backendModelKey(backend.id)] = model.trim().ifBlank { backend.defaultModel.orEmpty() }
+            prefs[backendInstructionsKey(backend.id)] = instructions.trim()
         }
+    }
+
+    suspend fun loadBackendSettings(backendId: String): AgentSettings {
+        val prefs =
+            context.dataStore.data
+                .catch { ex ->
+                    if (ex is IOException) emit(emptyPreferences()) else throw ex
+                }
+                .first()
+        val backend = AgentBackends.fromId(backendId)
+        return settingsFromPreferences(
+            prefs = prefs,
+            backend = backend,
+            allowLegacy = prefs[BACKEND_ID_KEY] == backend.id,
+        )
     }
 
     suspend fun saveVoiceSettings(
@@ -123,11 +142,52 @@ class SettingsRepository(private val context: Context) {
         return runCatching { json.decodeFromString<PersistedConversationState>(raw) }.getOrNull()
     }
 
+    private fun settingsFromPreferences(
+        prefs: Preferences,
+        backend: AgentBackend,
+        allowLegacy: Boolean,
+    ): AgentSettings {
+        val baseUrl =
+            prefs[backendBaseUrlKey(backend.id)]
+                ?: if (allowLegacy) prefs[BASE_URL_KEY] else null
+        val authToken =
+            prefs[backendAuthTokenKey(backend.id)]
+                ?: if (allowLegacy) prefs[AUTH_TOKEN_KEY] else null
+        val model =
+            prefs[backendModelKey(backend.id)]
+                ?: if (allowLegacy) prefs[MODEL_KEY] else null
+        val instructions =
+            prefs[backendInstructionsKey(backend.id)]
+                ?: if (allowLegacy) prefs[INSTRUCTIONS_KEY] else null
+        val defaultAuthToken =
+            if (backend.protocol == AgentBackendProtocol.CODEX_APP_SERVER) {
+                BuildConfig.DEFAULT_CODEX_AUTH_TOKEN
+            } else {
+                BuildConfig.DEFAULT_AUTH_TOKEN
+            }
+        return AgentSettings(
+            backendId = backend.id,
+            baseUrl = baseUrl?.ifBlank { backend.defaultBaseUrl } ?: backend.defaultBaseUrl,
+            authToken = authToken ?: defaultAuthToken,
+            model = model?.ifBlank { backend.defaultModel.orEmpty() } ?: backend.defaultModel.orEmpty(),
+            instructions =
+                instructions
+                    ?: if (backend.protocol == AgentBackendProtocol.CODEX_APP_SERVER) DEFAULT_WATCH_INSTRUCTIONS else "",
+            voiceInputProviderId = prefs[VOICE_INPUT_PROVIDER_KEY] ?: VoiceInputProviders.SARVAM,
+            sttBaseUrl = prefs[STT_BASE_URL_KEY]?.ifBlank { VoiceInputProviders.SARVAM_BASE_URL } ?: VoiceInputProviders.SARVAM_BASE_URL,
+            sttAuthToken = prefs[STT_AUTH_TOKEN_KEY]?.ifBlank { BuildConfig.DEFAULT_STT_AUTH_TOKEN } ?: BuildConfig.DEFAULT_STT_AUTH_TOKEN,
+            sttModel = prefs[STT_MODEL_KEY]?.ifBlank { "saaras:v3" } ?: "saaras:v3",
+            sttLanguageCode = prefs[STT_LANGUAGE_CODE_KEY]?.ifBlank { "unknown" } ?: "unknown",
+            sttMode = prefs[STT_MODE_KEY]?.ifBlank { "transcribe" } ?: "transcribe",
+        )
+    }
+
     private companion object {
         val BACKEND_ID_KEY = stringPreferencesKey("backend_id")
         val BASE_URL_KEY = stringPreferencesKey("base_url")
         val AUTH_TOKEN_KEY = stringPreferencesKey("auth_token")
         val MODEL_KEY = stringPreferencesKey("model")
+        val INSTRUCTIONS_KEY = stringPreferencesKey("instructions")
         val VOICE_INPUT_PROVIDER_KEY = stringPreferencesKey("voice_input_provider")
         val STT_BASE_URL_KEY = stringPreferencesKey("stt_base_url")
         val STT_AUTH_TOKEN_KEY = stringPreferencesKey("stt_auth_token")
@@ -135,6 +195,11 @@ class SettingsRepository(private val context: Context) {
         val STT_LANGUAGE_CODE_KEY = stringPreferencesKey("stt_language_code")
         val STT_MODE_KEY = stringPreferencesKey("stt_mode")
         val CONVERSATION_STATE_KEY = stringPreferencesKey("conversation_state_json")
+
+        fun backendBaseUrlKey(backendId: String) = stringPreferencesKey("base_url_$backendId")
+        fun backendAuthTokenKey(backendId: String) = stringPreferencesKey("auth_token_$backendId")
+        fun backendModelKey(backendId: String) = stringPreferencesKey("model_$backendId")
+        fun backendInstructionsKey(backendId: String) = stringPreferencesKey("instructions_$backendId")
     }
 }
 
