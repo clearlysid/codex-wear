@@ -13,7 +13,7 @@ val envProps = Properties().apply {
 }
 
 android {
-    namespace = "com.sidekick.watch"
+    namespace = "com.codex.wear"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -30,7 +30,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.sidekick.watch"
+        applicationId = "com.codex.wear"
         minSdk = 33
         targetSdk = 36
         versionCode = 1

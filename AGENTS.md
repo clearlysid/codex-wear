@@ -1,4 +1,4 @@
-# Sidekick
+# Codex Wear
 
 Wear OS remote companion for monitoring and controlling Codex.
 
@@ -18,8 +18,8 @@ Wear OS remote companion for monitoring and controlling Codex.
   6. Install: `~/Library/Android/sdk/platform-tools/adb -s <device> install -r <apk>`
   7. Re-set assistant settings (Samsung Wear OS clears these on every reinstall):
      ```
-     adb -s <device> shell settings put secure voice_interaction_service com.sidekick.watch/com.sidekick.watch.voice.SidekickVoiceInteractionService
-     adb -s <device> shell settings put secure assistant com.sidekick.watch/com.sidekick.watch.presentation.MainActivity
+     adb -s <device> shell settings put secure voice_interaction_service com.codex.wear/com.codex.wear.voice.SidekickVoiceInteractionService
+     adb -s <device> shell settings put secure assistant com.codex.wear/com.codex.wear.presentation.MainActivity
      ```
 - Signing config is in `wear/build.gradle.kts` (hardcoded keystore, not committed)
 

@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Sidekick"
+rootProject.name = "codex-wear"
 include(":wear")

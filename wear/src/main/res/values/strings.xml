@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Codex</string>
+    <string name="app_name">Codex Wear</string>
     <string name="hello_world">Hello, %1$s!</string>
     <string name="shortcut_voice_label">Ask Codex</string>
     <string name="shortcut_voice_long_label">Ask Codex by voice</string>

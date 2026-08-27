@@ -7,7 +7,7 @@
         android:shortcutLongLabel="@string/shortcut_voice_long_label">
         <intent
             android:action="android.intent.action.ASSIST"
-            android:targetPackage="com.sidekick.watch"
-            android:targetClass="com.sidekick.watch.presentation.MainActivity" />
+            android:targetPackage="com.codex.wear"
+            android:targetClass="com.codex.wear.presentation.MainActivity" />
     </shortcut>
 </shortcuts>

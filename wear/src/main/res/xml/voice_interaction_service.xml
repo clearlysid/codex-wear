@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:sessionService="com.sidekick.watch.voice.SidekickVoiceInteractionSessionService"
+    android:sessionService="com.codex.wear.voice.SidekickVoiceInteractionSessionService"
     android:supportsAssist="true" />
