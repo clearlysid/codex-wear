@@ -1,14 +1,14 @@
 # Sidekick
 
-AI assistant app. Monorepo with `android` (Wear OS) and `web`.
+Wear OS remote companion for monitoring and controlling Codex.
 
 ## Android / Wear OS
 
-- Gradle wrapper: `android/gradlew` (not project root)
+- Gradle wrapper: `./gradlew`
 - JAVA_HOME: `/Applications/Android Studio.app/Contents/jbr/Contents/Home` (no system JDK installed)
 - adb: `~/Library/Android/sdk/platform-tools/adb`
-- Build release APK: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" android/gradlew -p android :wear:assembleRelease`
-- APK output: `android/wear/build/outputs/apk/release/wear-release.apk`
+- Build release APK: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :wear:assembleRelease`
+- APK output: `wear/build/outputs/apk/release/wear-release.apk`
 - Deploy to watch:
   1. Watch: Settings → About → tap Build number 7x → enable Developer Options
   2. Watch: Settings → Developer Options → enable ADB debugging + Debug over Wi-Fi
@@ -21,13 +21,13 @@ AI assistant app. Monorepo with `android` (Wear OS) and `web`.
      adb -s <device> shell settings put secure voice_interaction_service com.sidekick.watch/com.sidekick.watch.voice.SidekickVoiceInteractionService
      adb -s <device> shell settings put secure assistant com.sidekick.watch/com.sidekick.watch.presentation.MainActivity
      ```
-- Signing config is in `android/wear/build.gradle.kts` (hardcoded keystore, not committed)
+- Signing config is in `wear/build.gradle.kts` (hardcoded keystore, not committed)
 
 ### Architecture
 
-- OkHttp for HTTP, no Retrofit
-- Backends: Hermes and OpenClaw through OpenAI-compatible `OpenAIRepository`
-- Backend uses SSE streaming (`sendMessageStreaming`) with `Flow<String>`
-- ViewModel: `ChatViewModel` — manages conversations, collects streaming chunks into UI state
-- Settings (base URL, model, auth token) stored via `SettingsRepository` (DataStore)
-- Entry point: `MainActivity` — HorizontalPager with home (chat) + settings pages
+- Codex app-server is the durable source of truth; the watch is a thin client.
+- `CodexRpcClient` uses WebSocket JSON-RPC for tasks, approvals, and usage limits.
+- `CodexTaskRepository` maintains task state and a lightweight watch cache.
+- Settings (server URL, authentication, and voice input) use DataStore.
+- `MainActivity` hosts Home, Task Detail, Image Viewer, and Settings navigation.
+- `AssistantActivity` provides voice-first task creation and continuation.

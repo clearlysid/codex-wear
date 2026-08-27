@@ -1,5 +1,6 @@
 *.iml
 .gradle
+/.kotlin/
 /local.properties
 /.idea/
 **/.idea/
@@ -10,15 +11,6 @@
 .cxx
 local.properties
 
-# Monorepo / web
-**/node_modules
-**/dist
-**/.turbo
-*.log
-
 # Secrets
 .env
 .env.codex
-
-# Android release artifacts
-android/**/release/

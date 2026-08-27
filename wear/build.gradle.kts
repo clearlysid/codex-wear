@@ -7,7 +7,7 @@ plugins {
 }
 
 val envProps = Properties().apply {
-    listOf("../.env", "../.env.codex").forEach { path ->
+    listOf(".env", ".env.codex").forEach { path ->
         rootProject.projectDir.resolve(path).takeIf { it.exists() }?.inputStream()?.use { load(it) }
     }
 }
