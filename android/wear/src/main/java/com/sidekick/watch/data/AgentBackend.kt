@@ -23,24 +23,6 @@ enum class AgentBackendProtocol {
 }
 
 object AgentBackends {
-    private val baseUrl = BuildConfig.DEFAULT_BASE_URL
-
-    val hermes =
-        AgentBackend(
-            id = "hermes",
-            displayName = "Hermes",
-            defaultBaseUrl = baseUrl,
-            defaultModel = "hermes:main",
-        )
-
-    val openclaw =
-        AgentBackend(
-            id = "openclaw",
-            displayName = "OpenClaw",
-            defaultBaseUrl = baseUrl,
-            defaultModel = "openclaw:main",
-        )
-
     val codex =
         AgentBackend(
             id = "codex",
@@ -61,7 +43,7 @@ object AgentBackends {
                 ),
         )
 
-    val supported: List<AgentBackend> = listOf(hermes, openclaw, codex)
+    val supported: List<AgentBackend> = listOf(codex)
 
     fun fromId(id: String?): AgentBackend = supported.firstOrNull { it.id == id } ?: codex
 }

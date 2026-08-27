@@ -46,7 +46,7 @@ class ResponseNotifier(private val context: Context) {
 
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Sidekick")
+            .setContentTitle("Codex")
             .setContentText(preview)
             .setContentIntent(pending)
             .setAutoCancel(true)

@@ -56,8 +56,11 @@ class SettingsRepository(private val context: Context) {
                 }
             }
             .map { prefs ->
-                val backend = AgentBackends.fromId(prefs[BACKEND_ID_KEY])
-                settingsFromPreferences(prefs, backend, allowLegacy = true)
+                settingsFromPreferences(
+                    prefs = prefs,
+                    backend = AgentBackends.codex,
+                    allowLegacy = prefs[BACKEND_ID_KEY] == AgentBackends.codex.id,
+                )
             }
 
     suspend fun saveSettings(
@@ -68,7 +71,7 @@ class SettingsRepository(private val context: Context) {
         instructions: String,
     ) {
         context.dataStore.edit { prefs ->
-            val backend = AgentBackends.fromId(backendId)
+            val backend = AgentBackends.codex
             val normalizedBaseUrl = normalizeBaseUrl(baseUrl).ifBlank { backend.defaultBaseUrl }
             prefs[BACKEND_ID_KEY] = backend.id
             prefs[BASE_URL_KEY] = normalizedBaseUrl
@@ -89,7 +92,7 @@ class SettingsRepository(private val context: Context) {
                     if (ex is IOException) emit(emptyPreferences()) else throw ex
                 }
                 .first()
-        val backend = AgentBackends.fromId(backendId)
+        val backend = AgentBackends.codex
         return settingsFromPreferences(
             prefs = prefs,
             backend = backend,
@@ -159,15 +162,14 @@ class SettingsRepository(private val context: Context) {
         val instructions =
             prefs[backendInstructionsKey(backend.id)]
                 ?: if (allowLegacy) prefs[INSTRUCTIONS_KEY] else null
-        val defaultAuthToken =
-            if (backend.protocol == AgentBackendProtocol.CODEX_APP_SERVER) {
-                BuildConfig.DEFAULT_CODEX_AUTH_TOKEN
-            } else {
-                BuildConfig.DEFAULT_AUTH_TOKEN
-            }
+        val defaultAuthToken = BuildConfig.DEFAULT_CODEX_AUTH_TOKEN
+        val resolvedBaseUrl =
+            baseUrl
+                ?.takeUnless { it.isBlank() || normalizeBaseUrl(it) == LEGACY_CODEX_BASE_URL }
+                ?: backend.defaultBaseUrl
         return AgentSettings(
             backendId = backend.id,
-            baseUrl = baseUrl?.ifBlank { backend.defaultBaseUrl } ?: backend.defaultBaseUrl,
+            baseUrl = resolvedBaseUrl,
             authToken = authToken ?: defaultAuthToken,
             model = model?.ifBlank { backend.defaultModel.orEmpty() } ?: backend.defaultModel.orEmpty(),
             instructions =
@@ -195,6 +197,8 @@ class SettingsRepository(private val context: Context) {
         val STT_LANGUAGE_CODE_KEY = stringPreferencesKey("stt_language_code")
         val STT_MODE_KEY = stringPreferencesKey("stt_mode")
         val CONVERSATION_STATE_KEY = stringPreferencesKey("conversation_state_json")
+
+        const val LEGACY_CODEX_BASE_URL = "wss://donna.catfish-basilisk.ts.net/codex"
 
         fun backendBaseUrlKey(backendId: String) = stringPreferencesKey("base_url_$backendId")
         fun backendAuthTokenKey(backendId: String) = stringPreferencesKey("auth_token_$backendId")

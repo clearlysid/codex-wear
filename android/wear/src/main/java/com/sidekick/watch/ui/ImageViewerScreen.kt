@@ -23,7 +23,6 @@ import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
-import coil3.size.Size
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
@@ -39,11 +38,11 @@ fun ImageViewerScreen(imageUrl: String) {
         focusRequester.requestFocus()
     }
 
-    // Load at full original resolution so zooming in stays sharp instead of pixelating
+    // Let Coil size the decode for the watch display. Decoding an original desktop-sized
+    // image can exhaust a watch's much smaller memory budget.
     val imageRequest = remember(imageUrl) {
         ImageRequest.Builder(context)
             .data(imageUrl)
-            .size(Size.ORIGINAL)
             .build()
     }
 

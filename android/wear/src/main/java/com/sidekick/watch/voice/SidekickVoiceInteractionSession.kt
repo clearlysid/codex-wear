@@ -6,8 +6,9 @@ import android.os.Bundle
 import android.service.voice.VoiceInteractionSession
 import android.view.LayoutInflater
 import android.view.View
+import android.widget.FrameLayout
 import com.sidekick.watch.R
-import com.sidekick.watch.presentation.MainActivity
+import com.sidekick.watch.presentation.AssistantActivity
 
 class SidekickVoiceInteractionSession(context: Context) : VoiceInteractionSession(context) {
 
@@ -18,12 +19,15 @@ class SidekickVoiceInteractionSession(context: Context) : VoiceInteractionSessio
     }
 
     override fun onCreateContentView(): View {
-        return LayoutInflater.from(context).inflate(R.layout.voice_listening, null)
+        return LayoutInflater.from(context).inflate(
+            R.layout.voice_listening,
+            FrameLayout(context),
+            false,
+        )
     }
 
     private fun launchActivity() {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            action = Intent.ACTION_ASSIST
+        val intent = Intent(context, AssistantActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         context.startActivity(intent)

@@ -35,14 +35,16 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-        buildConfigField("String", "DEFAULT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_AUTH_TOKEN", "")}\"")
-        buildConfigField("String", "DEFAULT_BASE_URL", "\"${envProps.getProperty("DEFAULT_BASE_URL", "")}\"")
-        buildConfigField("String", "DEFAULT_CODEX_BASE_URL", "\"${envProps.getProperty("DEFAULT_CODEX_BASE_URL", "wss://donna.catfish-basilisk.ts.net/codex")}\"")
-        buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_CODEX_AUTH_TOKEN", "")}\"")
-        buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_STT_AUTH_TOKEN", "")}\"")
+        buildConfigField("String", "DEFAULT_CODEX_BASE_URL", "\"${envProps.getProperty("DEFAULT_CODEX_BASE_URL", "wss://dusk.catfish-basilisk.ts.net/codex")}\"")
+        buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"\"")
+        buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"\"")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_CODEX_AUTH_TOKEN", "")}\"")
+            buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_STT_AUTH_TOKEN", "")}\"")
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
@@ -77,7 +79,6 @@ dependencies {
     implementation(libs.androidx.wear.tiles)
     implementation(libs.androidx.wear.tiles.material)
     implementation(libs.androidx.wear.protolayout.material3)
-    implementation(libs.androidx.wear.watchface.complications.data.source.ktx)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.compose.ui.tooling)
@@ -97,6 +98,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.core.splashscreen)
+    testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)

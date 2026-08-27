@@ -89,7 +89,7 @@ fun VoiceListeningScreen(
     rmsLevel: Float = 0f,
     partialText: String = "",
     isReady: Boolean = true,
-    statusText: String = "Ask Sidekick",
+    statusText: String = "Ask Codex",
     canSend: Boolean = false,
     onSend: () -> Unit = {},
 ) {

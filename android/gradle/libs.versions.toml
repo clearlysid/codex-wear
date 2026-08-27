@@ -21,7 +21,6 @@ wearComposeMaterial = "1.4.1"
 wearInput = "1.2.0"
 wearTiles = "1.6.0-rc02"
 wearProtoLayout = "1.4.0-rc02"
-wearWatchface = "1.2.1"
 okhttp = "4.12.0"
 guava = "33.2.1-android"
 datastore = "1.1.1"
@@ -59,7 +58,6 @@ androidx-wear-input = { group = "androidx.wear", name = "wear-input", version.re
 androidx-wear-tiles = { group = "androidx.wear.tiles", name = "tiles", version.ref = "wearTiles" }
 androidx-wear-tiles-material = { group = "androidx.wear.tiles", name = "tiles-material", version.ref = "wearTiles" }
 androidx-wear-protolayout-material3 = { group = "androidx.wear.protolayout", name = "protolayout-material3", version.ref = "wearProtoLayout" }
-androidx-wear-watchface-complications-data-source-ktx = { group = "androidx.wear.watchface", name = "watchface-complications-data-source-ktx", version.ref = "wearWatchface" }
 androidx-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "composeFoundation" }
 compose-ui-tooling = { group = "androidx.wear.compose", name = "compose-ui-tooling", version.ref = "composeUiTooling" }
 androidx-wear-tooling-preview = { group = "androidx.wear", name = "wear-tooling-preview", version.ref = "wearToolingPreview" }

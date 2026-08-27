@@ -134,7 +134,7 @@ class CodexAppServerRepository(private val client: OkHttpClient) {
                             "clientInfo",
                             JSONObject()
                                 .put("name", "sidekick-watch")
-                                .put("title", "Sidekick Watch")
+                                .put("title", "Codex Watch")
                                 .put("version", "1.0"),
                         ),
                     )
@@ -235,6 +235,6 @@ class CodexAppServerRepository(private val client: OkHttpClient) {
 
     private companion object {
         const val TAG = "CodexAppServer"
-        const val EXPECTED_CODEX_VERSION = "0.144.1"
+        const val EXPECTED_CODEX_VERSION = "0.149.1"
     }
 }

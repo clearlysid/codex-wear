@@ -386,7 +386,7 @@ class AgentService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_WORKING)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Sidekick")
+            .setContentTitle("Codex")
             .setContentText("Thinking…")
             .setOngoing(true)
             .build()

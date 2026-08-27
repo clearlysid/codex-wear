@@ -1,19 +1,16 @@
-# Sidekick (for Wear OS ⌚)
+# Codex companion for Wear OS ⌚
 
-Sidekick brings your AI Assistant to your wrist. A claw should be attached to your limbs after all 🤪
+This app is a focused Codex monitoring companion for Wear OS.
 
-It's a small app for WearOS that lets you interact with Hermes, OpenClaw, and other OpenAI-compatible agents through voice or text. You can start conversations, track old ones, get notified via haptics when your bot responds. It's really just meant to be a nice, clean, efficient way of summoning your clankers — with a UI that feels unobtrusive.
-
-I built this because I needed an "Agent Babysitter" that I could tap into, even if I was on a walk or on a train. Situations where access to a laptop or phone is either impractical or uncomfortable.
+Use voice to start or continue a Codex task, monitor concurrent work from Home or the Tile, respond to approvals delivered to the watch, stop active work, and review compact task timelines. Codex app-server remains the source of truth; the watch keeps only a lightweight seven-day summary cache.
 
 ### Roadmap
-- [x] Basic UI
-- [x] Hermes support
-- [x] OpenClaw support
-- [x] Haptics for replies
-- [x] Voice mode quick launch
-- [x] Tile + Complication
-- [ ] Nicer landing page
+- [x] Voice-first Assistant
+- [x] Activity, Today, and seven-day task views
+- [x] Structured task detail and approvals
+- [x] Four-state monitoring Tile
+- [x] Background monitoring and task notifications
+- [ ] Push relay for idle cross-device discovery
 
 ## Developer Guide
 
@@ -46,5 +43,5 @@ bun run android:wear:build
 ### Notes
 
 1. Pushing to `main` deploys landing page to Github pages.
-2. PRs for bugfixes and support for other agents are welcome.
+2. Product decisions are recorded in `DESIGN_DECISIONS.md`.
 3. It's my very first Kotlin project — be kind!
