@@ -25,18 +25,6 @@ data class HomeUiState(
     val connectionError: String? = null,
 )
 
-data class TaskSectionUi(
-    val title: String,
-    val tasks: List<TaskSummaryUi>,
-)
-
-data class AllTasksUiState(
-    val isLoading: Boolean = true,
-    val recent: List<TaskSummaryUi> = emptyList(),
-    val projectSections: List<TaskSectionUi> = emptyList(),
-    val connectionError: String? = null,
-)
-
 sealed interface TimelineItemUi {
     val id: String
 

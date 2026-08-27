@@ -3,6 +3,7 @@ package com.sidekick.watch.domain
 import com.sidekick.watch.data.codex.CodexProject
 import com.sidekick.watch.data.codex.CodexTaskState
 import com.sidekick.watch.data.codex.CodexTaskSummary
+import com.sidekick.watch.data.codex.calculateUsageRemainingPercent
 import java.time.Instant
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
@@ -15,56 +16,6 @@ class TaskPresentationOrganizerTest {
     private val alpha = CodexProject(id = "alpha", name = "Alpha")
     private val beta = CodexProject(id = "beta", name = "Beta")
     private val gamma = CodexProject(id = "gamma", name = "Gamma")
-
-    @Test
-    fun `all tasks uses inclusive seven-day cutoff and excludes recent from groups`() {
-        val atBoundary = now - TASK_LOOKBACK_SECONDS
-        val tasks =
-            listOf(
-                task("recent-a", hoursAgo = 1, project = alpha),
-                task("recent-b", hoursAgo = 2, project = beta),
-                task("recent-none", hoursAgo = 3),
-                task("alpha-older", hoursAgo = 4, project = alpha),
-                task("gamma-newer", hoursAgo = 5, project = gamma),
-                task("beta-older", hoursAgo = 6, project = beta),
-                taskAt("boundary", atBoundary, project = gamma),
-                taskAt("too-old", atBoundary - 1, project = alpha),
-            )
-
-        val result = organizeAllTasks(tasks, nowEpochSeconds = now)
-
-        assertEquals(listOf("recent-a", "recent-b", "recent-none"), result.recent.ids())
-        assertEquals(listOf("alpha", "gamma", "beta"), result.projectGroups.map { it.project?.id })
-        assertEquals(listOf("alpha-older"), result.projectGroups[0].tasks.ids())
-        assertEquals(listOf("gamma-newer", "boundary"), result.projectGroups[1].tasks.ids())
-        assertEquals(listOf("beta-older"), result.projectGroups[2].tasks.ids())
-
-        val allIds = result.recent.ids() + result.projectGroups.flatMap { it.tasks.ids() }
-        assertEquals(allIds.size, allIds.distinct().size)
-        assertTrue("boundary" in allIds)
-        assertFalse("too-old" in allIds)
-    }
-
-    @Test
-    fun `project groups are ordered and populated newest first including no project`() {
-        val result =
-            organizeAllTasks(
-                tasks =
-                    listOf(
-                        task("recent", hoursAgo = 1, project = gamma),
-                        task("no-project-new", hoursAgo = 2),
-                        task("alpha-new", hoursAgo = 3, project = alpha),
-                        task("no-project-old", hoursAgo = 4),
-                        task("alpha-old", hoursAgo = 5, project = alpha),
-                    ),
-                nowEpochSeconds = now,
-                recentLimit = 1,
-            )
-
-        assertEquals(listOf(null, "alpha"), result.projectGroups.map { it.project?.id })
-        assertEquals(listOf("no-project-new", "no-project-old"), result.projectGroups[0].tasks.ids())
-        assertEquals(listOf("alpha-new", "alpha-old"), result.projectGroups[1].tasks.ids())
-    }
 
     @Test
     fun `home prioritizes attention then errors working and unread completions`() {
@@ -182,6 +133,14 @@ class TaskPresentationOrganizerTest {
             listOf("alpha", "beta", "gamma", "delta", "epsilon"),
             selectRecentProjects(tasks).map(CodexProject::id),
         )
+    }
+
+    @Test
+    fun `usage chooses the tightest active limit`() {
+        assertEquals(57, calculateUsageRemainingPercent(null, listOf(43)))
+        assertEquals(18, calculateUsageRemainingPercent(64, listOf(41, 82)))
+        assertEquals(0, calculateUsageRemainingPercent(null, listOf(130)))
+        assertEquals(null, calculateUsageRemainingPercent(null, emptyList()))
     }
 
     @Test

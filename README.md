@@ -6,9 +6,9 @@ Use voice to start or continue a Codex task, monitor concurrent work from Home o
 
 ### Roadmap
 - [x] Voice-first Assistant
-- [x] Activity, Today, and seven-day task views
+- [x] Activity and Today task views
 - [x] Structured task detail and approvals
-- [x] Four-state monitoring Tile
+- [x] Four-state monitoring Tile with usage limits
 - [x] Background monitoring and task notifications
 - [ ] Push relay for idle cross-device discovery
 

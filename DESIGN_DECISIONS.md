@@ -2,13 +2,12 @@
 - Make task input voice-first, while retaining keyboard input for connection, token, and other Settings fields.
 - Replace the root-level Home/Settings pager with navigation from Home.
 - Rebrand Sidekick as a dedicated Codex companion focused on Codex monitoring, rather than a general-purpose app with swappable backends.
-- Use the Tile as a Codex task monitor with Idle, Working, Needs attention, and Complete states; show one focused task or up to two prioritized task rows with a total count, with attention taking precedence and each row opening its task.
-- Order Home as Ask Codex, Activity, Today, Settings, and All Tasks; Settings and All Tasks are subpages, while Ask Codex opens voice input and task rows open Task Detail.
-- Make Task Detail a chronological timeline of messages, images, grouped tool activity, file changes, inline approvals at the point Codex pauses, and retryable errors, with a state-aware voice action at the bottom; visual styling can evolve.
+- Use the Tile as a Codex task monitor with Idle, Working, Needs attention, and Complete states; show one focused task or up to two prioritized task rows, with attention taking precedence and each row opening its task, omit the state badge, and show the tightest current Codex usage limit at the bottom.
+- Order Home as a compact Ask Codex action, Activity when non-empty, Today, and Settings; task rows open Task Detail and status is communicated by card background instead of a leading icon.
+- Make Task Detail a chronological timeline that opens at the latest item: user messages use a compact dark card without a sender label, while Codex replies, subtle grouped tool activity, file changes, inline approvals, and retryable errors remain flat; omit reasoning entirely and keep a state-aware voice action at the bottom.
 - Make the summoned Assistant a fast, full-screen overlay that starts real-time long-form transcription immediately, never auto-sends, and places a protected Redo action beside the primary Send action.
 - Keep the selected project visible and use the crown to cycle through No project (the default) and the five most recent projects without interrupting transcription; do not add a full project browser.
 - After Send, keep the Assistant visible for a bounded grace window so quick answers, approvals, and errors can appear inline; hand longer tasks to the background for Tile and notification monitoring, without sending duplicate notifications for answers already shown.
-- Make All Tasks a seven-day list with a short Recent section followed by remaining tasks grouped by project, including No project; tapping a row opens Task Detail.
 - Keep Settings to Codex connection and voice only, with no default project, About, or diagnostics; connection failures use a clear full-screen recovery state with Retry and Open Settings actions.
 - Keep tool calls and file changes summary-only on the watch, with no detailed inspection or desktop handoff in the initial version.
 - Treat Codex app-server as the durable source of truth and the watch as a thin client; cache only task summaries, recent projects, statuses, and local read state for fast rendering.

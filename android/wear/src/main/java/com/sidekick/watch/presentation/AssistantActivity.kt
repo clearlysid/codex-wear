@@ -25,6 +25,7 @@ import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
+import com.sidekick.watch.BuildConfig
 import com.sidekick.watch.data.AgentSettings
 import com.sidekick.watch.data.HttpClientProvider
 import com.sidekick.watch.data.SarvamRealtimeTranscriber
@@ -35,6 +36,8 @@ import com.sidekick.watch.presentation.theme.SidekickTheme
 import com.sidekick.watch.ui.AssistantScreen
 import com.sidekick.watch.viewmodel.AssistantPhaseUi
 import com.sidekick.watch.viewmodel.AssistantViewModel
+import com.sidekick.watch.viewmodel.AssistantUiState
+import com.sidekick.watch.viewmodel.ProjectOptionUi
 import java.util.Locale
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -92,6 +95,30 @@ class AssistantActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.SCREENSHOT_MODE) {
+            setContent {
+                SidekickTheme {
+                    AssistantScreen(
+                        state = AssistantUiState(
+                            phase = AssistantPhaseUi.LISTENING,
+                            rmsLevel = 5.5f,
+                            projects = listOf(
+                                ProjectOptionUi(null, "No project"),
+                                ProjectOptionUi("sidekick", "sidekick"),
+                            ),
+                        ),
+                        onProjectStep = {},
+                        onRedo = {},
+                        onSend = {},
+                        onRetry = {},
+                        onApprove = {},
+                        onDecline = {},
+                        onDone = {},
+                    )
+                }
+            }
+            return
+        }
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             SidekickTheme {

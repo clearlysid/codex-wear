@@ -21,6 +21,7 @@ data class TaskCacheSnapshot(
     val tasks: List<CodexTaskSummary> = emptyList(),
     val seenTaskIds: Set<String> = emptySet(),
     val completionNotifiedTaskIds: Set<String> = emptySet(),
+    val usageRemainingPercent: Int? = null,
 )
 
 /** A summary-only cache. Full task transcripts and live approval handles are never persisted. */
@@ -51,6 +52,10 @@ class TaskSnapshotStore(context: Context) {
         }
     }
 
+    suspend fun replaceUsageRemainingPercent(remainingPercent: Int?) {
+        update { it.copy(usageRemainingPercent = remainingPercent?.coerceIn(0, 100)) }
+    }
+
     suspend fun markSeen(taskId: String) {
         update { snapshot ->
             snapshot.copy(
@@ -77,6 +82,7 @@ class TaskSnapshotStore(context: Context) {
             .put("tasks", JSONArray().apply { snapshot.tasks.forEach { put(it.toJson()) } })
             .put("seen", JSONArray(snapshot.seenTaskIds.toList()))
             .put("notified", JSONArray(snapshot.completionNotifiedTaskIds.toList()))
+            .putNullable("usageRemainingPercent", snapshot.usageRemainingPercent)
             .toString()
 
     private fun decode(raw: String?): TaskCacheSnapshot {
@@ -87,6 +93,7 @@ class TaskSnapshotStore(context: Context) {
                 tasks = root.optJSONArray("tasks").objects().mapNotNull(::taskFromJson),
                 seenTaskIds = root.optJSONArray("seen").strings().toSet(),
                 completionNotifiedTaskIds = root.optJSONArray("notified").strings().toSet(),
+                usageRemainingPercent = root.optNullableInt("usageRemainingPercent"),
             )
         }.getOrDefault(TaskCacheSnapshot())
     }
@@ -173,6 +180,9 @@ private fun JSONObject.optNullableString(name: String): String? =
 
 private fun JSONObject.optNullableLong(name: String): Long? =
     if (!has(name) || isNull(name)) null else optLong(name)
+
+private fun JSONObject.optNullableInt(name: String): Int? =
+    if (!has(name) || isNull(name)) null else optInt(name)
 
 private fun JSONArray?.objects(): List<JSONObject> =
     if (this == null) emptyList() else (0 until length()).mapNotNull(::optJSONObject)

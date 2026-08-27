@@ -4,8 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -16,7 +16,8 @@ import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.Card
-import androidx.wear.compose.material3.CircularProgressIndicator
+import androidx.wear.compose.material3.CardDefaults
+import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
@@ -32,7 +33,6 @@ fun CodexHomeScreen(
     onAskCodex: () -> Unit,
     onTaskClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
-    onAllTasksClick: () -> Unit,
     onRetryConnection: () -> Unit,
 ) {
     state.connectionError?.let { error ->
@@ -60,36 +60,30 @@ fun CodexHomeScreen(
                 }
 
                 item(key = "ask", contentType = "action") {
-                    Card(
-                        onClick = onAskCodex,
+                    Box(
                         modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                        transformation = SurfaceTransformation(transformationSpec),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Icon(Icons.Filled.Mic, contentDescription = null)
-                        Text("Ask Codex", style = MaterialTheme.typography.titleSmall)
+                        FilledIconButton(
+                            onClick = onAskCodex,
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(Icons.Filled.Mic, contentDescription = "Ask Codex")
+                        }
                     }
                 }
 
-                sectionLabel("activity-label", "Activity", transformationSpec)
-                if (state.isLoading && state.activity.isEmpty()) {
-                    item(key = "loading", contentType = "status") {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp)
-                                .transformedHeight(this, transformationSpec),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator()
-                        }
-                    }
-                } else if (state.activity.isEmpty()) {
-                    emptyRow("activity-empty", "Nothing needs attention", transformationSpec)
-                } else {
+                if (state.activity.isNotEmpty()) {
+                    sectionLabel("activity-label", "Activity", transformationSpec)
                     state.activity.forEach { task ->
                         item(key = "activity-${task.id}", contentType = "task") {
                             Card(
                                 onClick = { onTaskClick(task.id) },
                                 modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
                                 transformation = SurfaceTransformation(transformationSpec),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = task.status.cardContainerColor(),
+                                ),
                             ) { TaskSummaryContent(task) }
                         }
                     }
@@ -105,6 +99,9 @@ fun CodexHomeScreen(
                                 onClick = { onTaskClick(task.id) },
                                 modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
                                 transformation = SurfaceTransformation(transformationSpec),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = task.status.cardContainerColor(),
+                                ),
                             ) { TaskSummaryContent(task) }
                         }
                     }
@@ -118,16 +115,6 @@ fun CodexHomeScreen(
                     ) {
                         Icon(Icons.Filled.Settings, contentDescription = null)
                         Text("Settings")
-                    }
-                }
-                item(key = "all-tasks", contentType = "navigation") {
-                    Card(
-                        onClick = onAllTasksClick,
-                        modifier = Modifier.fillMaxWidth().transformedHeight(this, transformationSpec),
-                        transformation = SurfaceTransformation(transformationSpec),
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null)
-                        Text("All Tasks")
                     }
                 }
             }

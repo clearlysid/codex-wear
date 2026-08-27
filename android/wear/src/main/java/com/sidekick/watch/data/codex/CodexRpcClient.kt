@@ -226,7 +226,7 @@ class CodexRpcClient(
     /** Sends a JSON-RPC request and returns its unmodified result value. */
     suspend fun request(
         method: String,
-        params: JSONObject = JSONObject(),
+        params: Any? = JSONObject(),
         timeoutMs: Long = requestTimeoutMs,
     ): Any? {
         require(method.isNotBlank()) { "method must not be blank" }
@@ -238,7 +238,7 @@ class CodexRpcClient(
 
     suspend fun requestObject(
         method: String,
-        params: JSONObject = JSONObject(),
+        params: Any? = JSONObject(),
         timeoutMs: Long = requestTimeoutMs,
     ): JSONObject =
         request(method, params, timeoutMs) as? JSONObject
@@ -458,7 +458,7 @@ class CodexRpcClient(
     private suspend fun sendRequest(
         transport: ActiveTransport,
         method: String,
-        params: JSONObject,
+        params: Any?,
         timeoutMs: Long,
     ): Any? {
         val id = nextRequestId.getAndIncrement()
@@ -473,7 +473,7 @@ class CodexRpcClient(
             JSONObject()
                 .put("id", id)
                 .put("method", method)
-                .put("params", params)
+                .put("params", params ?: JSONObject.NULL)
         try {
             sendFrame(transport, request, method)
             return withTimeout(timeoutMs) { deferred.await() }

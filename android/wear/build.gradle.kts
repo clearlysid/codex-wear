@@ -38,12 +38,20 @@ android {
         buildConfigField("String", "DEFAULT_CODEX_BASE_URL", "\"${envProps.getProperty("DEFAULT_CODEX_BASE_URL", "wss://dusk.catfish-basilisk.ts.net/codex")}\"")
         buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"\"")
         buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"\"")
+        buildConfigField("boolean", "SCREENSHOT_MODE", "false")
     }
 
     buildTypes {
         debug {
             buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_CODEX_AUTH_TOKEN", "")}\"")
             buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"${envProps.getProperty("DEFAULT_STT_AUTH_TOKEN", "")}\"")
+        }
+        create("screenshot") {
+            initWith(getByName("debug"))
+            matchingFallbacks += listOf("debug")
+            buildConfigField("String", "DEFAULT_CODEX_AUTH_TOKEN", "\"\"")
+            buildConfigField("String", "DEFAULT_STT_AUTH_TOKEN", "\"\"")
+            buildConfigField("boolean", "SCREENSHOT_MODE", "true")
         }
         release {
             isMinifyEnabled = false

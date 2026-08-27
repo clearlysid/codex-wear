@@ -208,6 +208,17 @@ data class CodexTaskDetail(
     val pendingActions: List<CodexPendingAction> = emptyList(),
 )
 
+internal fun calculateUsageRemainingPercent(
+    individualRemainingPercent: Int?,
+    usedPercents: List<Int>,
+): Int? {
+    val candidates = buildList {
+        individualRemainingPercent?.let(::add)
+        usedPercents.forEach { usedPercent -> add(100 - usedPercent) }
+    }
+    return candidates.minOrNull()?.coerceIn(0, 100)
+}
+
 /** JSON-RPC ids may be either numbers or strings. */
 sealed interface CodexRpcId {
     data class NumberValue(val value: Long) : CodexRpcId

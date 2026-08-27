@@ -18,15 +18,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.sidekick.watch.BuildConfig
 import com.sidekick.watch.presentation.theme.SidekickTheme
 import com.sidekick.watch.tile.SidekickTileService
-import com.sidekick.watch.ui.AllTasksScreen
 import com.sidekick.watch.ui.CodexHomeScreen
 import com.sidekick.watch.ui.ImageViewerScreen
 import com.sidekick.watch.ui.SettingsScreen
 import com.sidekick.watch.ui.TaskDetailScreen
 import com.sidekick.watch.viewmodel.CodexCompanionViewModel
+import com.sidekick.watch.viewmodel.HomeUiState
+import com.sidekick.watch.viewmodel.TaskStatusUi
+import com.sidekick.watch.viewmodel.TaskSummaryUi
 import com.sidekick.watch.viewmodel.TaskDetailUiState
+import com.sidekick.watch.viewmodel.TimelineItemUi
 
 class MainActivity : ComponentActivity() {
     private val viewModel: CodexCompanionViewModel by viewModels { CodexCompanionViewModel.Factory(this) }
@@ -38,6 +42,41 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (BuildConfig.SCREENSHOT_MODE) {
+            val screenshotState = intent?.getStringExtra(EXTRA_SCREENSHOT_STATE)
+            setContent {
+                SidekickTheme {
+                    if (screenshotState == SCREENSHOT_TASK_DETAIL ||
+                        screenshotState == SCREENSHOT_TASK_DETAIL_RESPONSE
+                    ) {
+                        TaskDetailScreen(
+                            state = screenshotTaskDetailState(
+                                showResponse = screenshotState == SCREENSHOT_TASK_DETAIL_RESPONSE,
+                            ),
+                            onApprove = {},
+                            onDecline = {},
+                            onStop = {},
+                            onRetryItem = {},
+                            onReply = {},
+                            onImageClick = {},
+                            onRetryConnection = {},
+                            onOpenSettings = {},
+                        )
+                    } else {
+                        CodexHomeScreen(
+                            state = screenshotHomeState(screenshotState != SCREENSHOT_HOME_EMPTY),
+                            onAskCodex = {
+                                startActivity(Intent(this@MainActivity, AssistantActivity::class.java))
+                            },
+                            onTaskClick = {},
+                            onSettingsClick = {},
+                            onRetryConnection = {},
+                        )
+                    }
+                }
+            }
+            return
+        }
         handleLaunchIntent(intent)
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -63,7 +102,6 @@ class MainActivity : ComponentActivity() {
                             onAskCodex = ::launchAssistant,
                             onTaskClick = { navController.navigate("$TASK_ROUTE/$it") },
                             onSettingsClick = { navController.navigate(SETTINGS_ROUTE) },
-                            onAllTasksClick = { navController.navigate(ALL_TASKS_ROUTE) },
                             onRetryConnection = viewModel::refresh,
                         )
                     }
@@ -77,14 +115,6 @@ class MainActivity : ComponentActivity() {
                             onSaveAuthToken = viewModel::saveAuthToken,
                             onSaveVoiceInputProvider = viewModel::saveVoiceInputProvider,
                             onSaveSttAuthToken = viewModel::saveSttAuthToken,
-                        )
-                    }
-                    composable(ALL_TASKS_ROUTE) {
-                        AllTasksScreen(
-                            state = state.allTasks,
-                            onTaskClick = { navController.navigate("$TASK_ROUTE/$it") },
-                            onRetryConnection = viewModel::refresh,
-                            onOpenSettings = { navController.navigate(SETTINGS_ROUTE) },
                         )
                     }
                     composable(
@@ -121,7 +151,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        viewModel.refresh()
+        if (!BuildConfig.SCREENSHOT_MODE) viewModel.refresh()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -162,11 +192,88 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_TASK_ID = "task_id"
+        const val EXTRA_SCREENSHOT_STATE = "screenshot_state"
+        const val SCREENSHOT_HOME_EMPTY = "home_empty"
+        const val SCREENSHOT_TASK_DETAIL = "task_detail"
+        const val SCREENSHOT_TASK_DETAIL_RESPONSE = "task_detail_response"
         private const val HOME_ROUTE = "home"
         private const val SETTINGS_ROUTE = "settings"
-        private const val ALL_TASKS_ROUTE = "allTasks"
         private const val TASK_ROUTE = "task"
         private const val IMAGE_ROUTE = "image"
         private const val LEGACY_CONVERSATION_ID = "conversation_id"
     }
+}
+
+private fun screenshotTaskDetailState(showResponse: Boolean): TaskDetailUiState =
+    TaskDetailUiState(
+        taskId = "design-chat",
+        title = "Polish the Wear OS layout",
+        projectName = "sidekick",
+        status = TaskStatusUi.IDLE,
+        isLoading = false,
+        timeline =
+            if (showResponse) {
+                listOf(
+                    TimelineItemUi.UserMessage(
+                        id = "user",
+                        text = "Make the task view more compact.",
+                    ),
+                    TimelineItemUi.CodexMessage(
+                        id = "codex",
+                        text = "Done. Replies now sit directly on the surface to preserve space.",
+                    ),
+                )
+            } else {
+                listOf(
+                    TimelineItemUi.CodexMessage(
+                        id = "codex",
+                        text = "I tightened the task timeline for the watch.",
+                    ),
+                    TimelineItemUi.ToolActivity(
+                        id = "tools",
+                        title = "2 tool calls",
+                        summary = "Read layout · Updated timeline",
+                    ),
+                    TimelineItemUi.UserMessage(
+                        id = "user",
+                        text = "Make the latest reply easier to reach.",
+                    ),
+                )
+            },
+    )
+
+private fun screenshotHomeState(showActivity: Boolean): HomeUiState {
+    val now = System.currentTimeMillis()
+    return HomeUiState(
+        isLoading = false,
+        activity = if (showActivity) {
+            listOf(
+                TaskSummaryUi(
+                    id = "attention",
+                    title = "Review deployment permission",
+                    projectName = "sidekick",
+                    updatedAtEpochMs = now,
+                    status = TaskStatusUi.NEEDS_ATTENTION,
+                ),
+                TaskSummaryUi(
+                    id = "working",
+                    title = "Polish the Wear OS layout",
+                    projectName = "sidekick",
+                    updatedAtEpochMs = now - 60_000L,
+                    status = TaskStatusUi.WORKING,
+                ),
+            )
+        } else {
+            emptyList()
+        },
+        today = listOf(
+            TaskSummaryUi(
+                id = "complete",
+                title = "Build Codex monitoring companion",
+                projectName = "sidekick",
+                updatedAtEpochMs = now - 3_600_000L,
+                status = TaskStatusUi.COMPLETE,
+            ),
+        ),
+    )
 }

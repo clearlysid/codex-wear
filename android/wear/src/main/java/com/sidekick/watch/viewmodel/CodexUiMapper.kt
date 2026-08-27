@@ -6,7 +6,6 @@ import com.sidekick.watch.data.codex.CodexTaskState
 import com.sidekick.watch.data.codex.CodexTaskSummary
 import com.sidekick.watch.data.codex.CodexTimelineItem
 import com.sidekick.watch.data.codex.CodexTimelineItemStatus
-import com.sidekick.watch.domain.AllTasksOrganization
 import com.sidekick.watch.domain.HomeTaskSections
 
 fun HomeTaskSections.toUi(isLoading: Boolean = false, connectionError: String? = null): HomeUiState =
@@ -14,22 +13,6 @@ fun HomeTaskSections.toUi(isLoading: Boolean = false, connectionError: String? =
         isLoading = isLoading,
         activity = activity.map(CodexTaskSummary::toUi),
         today = today.map(CodexTaskSummary::toUi),
-        connectionError = connectionError,
-    )
-
-fun AllTasksOrganization.toUi(
-    isLoading: Boolean = false,
-    connectionError: String? = null,
-): AllTasksUiState =
-    AllTasksUiState(
-        isLoading = isLoading,
-        recent = recent.map(CodexTaskSummary::toUi),
-        projectSections = projectGroups.map { group ->
-            TaskSectionUi(
-                title = group.project?.name?.takeIf(String::isNotBlank) ?: "No project",
-                tasks = group.tasks.map(CodexTaskSummary::toUi),
-            )
-        },
         connectionError = connectionError,
     )
 
@@ -148,10 +131,14 @@ private fun buildTimelineUi(
                         message = item.message,
                         canRetry = item.retryable,
                     )
-                    is CodexTimelineItem.Unknown -> result += TimelineItemUi.ToolActivity(
-                        id = item.id,
-                        title = item.label ?: item.rawType,
-                    )
+                    is CodexTimelineItem.Unknown -> {
+                        if (!item.rawType.contains("reasoning", ignoreCase = true)) {
+                            result += TimelineItemUi.ToolActivity(
+                                id = item.id,
+                                title = item.label ?: item.rawType,
+                            )
+                        }
+                    }
                     is CodexTimelineItem.CommandExecution,
                     is CodexTimelineItem.ToolCall,
                     -> Unit

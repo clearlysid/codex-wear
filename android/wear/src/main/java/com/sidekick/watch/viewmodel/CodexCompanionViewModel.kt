@@ -10,7 +10,6 @@ import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.data.codex.CodexApprovalDecision
 import com.sidekick.watch.data.codex.CodexTaskRepository
 import com.sidekick.watch.data.codex.CodexTaskState
-import com.sidekick.watch.domain.organizeAllTasks
 import com.sidekick.watch.domain.organizeHomeTasks
 import com.sidekick.watch.service.CodexMonitorService
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +19,6 @@ import kotlinx.coroutines.launch
 
 data class CodexCompanionUiState(
     val home: HomeUiState = HomeUiState(),
-    val allTasks: AllTasksUiState = AllTasksUiState(),
     val taskDetails: Map<String, TaskDetailUiState> = emptyMap(),
     val settings: AgentSettings = AgentSettings(),
 )
@@ -54,9 +52,6 @@ class CodexCompanionViewModel(
                     _uiState.value.copy(
                         home =
                             organizeHomeTasks(repositoryState.tasks, now)
-                                .toUi(repositoryState.isRefreshing, error),
-                        allTasks =
-                            organizeAllTasks(repositoryState.tasks, now)
                                 .toUi(repositoryState.isRefreshing, error),
                         taskDetails =
                             repositoryState.details.mapValues { (_, detail) ->

@@ -2,10 +2,12 @@ package com.sidekick.watch.data.codex
 
 import android.content.Context
 import android.util.Log
+import androidx.wear.tiles.TileService
 import com.sidekick.watch.data.AgentSettings
 import com.sidekick.watch.data.DEFAULT_WATCH_INSTRUCTIONS
 import com.sidekick.watch.data.SettingsRepository
 import com.sidekick.watch.data.TaskDeliveryRegistry
+import com.sidekick.watch.tile.SidekickTileService
 import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
@@ -36,6 +38,7 @@ data class CodexTaskRepositoryState(
     val isUsingCache: Boolean = true,
     val connectionError: String? = null,
     val isCacheLoaded: Boolean = false,
+    val usageRemainingPercent: Int? = null,
 )
 
 /**
@@ -65,7 +68,12 @@ class CodexTaskRepository private constructor(context: Context) : Closeable {
         scope.launch {
             val cached = runCatching { snapshotStore.load() }.getOrDefault(TaskCacheSnapshot())
             _state.value =
-                _state.value.copy(tasks = cached.tasks, isUsingCache = true, isCacheLoaded = true)
+                _state.value.copy(
+                    tasks = cached.tasks,
+                    isUsingCache = true,
+                    isCacheLoaded = true,
+                    usageRemainingPercent = cached.usageRemainingPercent,
+                )
             settingsRepository.settingsFlow
                 .map { settings ->
                     latestSettings = settings
@@ -108,6 +116,12 @@ class CodexTaskRepository private constructor(context: Context) : Closeable {
                             connectionError = null,
                         )
                     requestPersist()
+                    runCatching { readUsageRemainingPercent(rpc) }
+                        .onSuccess(::updateUsageRemainingPercent)
+                        .onFailure { error ->
+                            if (error is CancellationException) throw error
+                            Log.w(TAG, "Usage-limit refresh failed", error)
+                        }
                     reconciled.filter { it.state == CodexTaskState.WORKING || it.state == CodexTaskState.NEEDS_ATTENTION }
                         .forEach { task ->
                             runCatching {
@@ -392,6 +406,11 @@ class CodexTaskRepository private constructor(context: Context) : Closeable {
         return tasks.distinctBy(CodexTaskSummary::id)
     }
 
+    private suspend fun readUsageRemainingPercent(rpc: CodexRpcClient): Int? =
+        parseUsageRemainingPercent(
+            rpc.requestObject("account/rateLimits/read", params = null),
+        )
+
     private fun reconcileSummary(
         server: CodexTaskSummary,
         previous: CodexTaskSummary?,
@@ -453,6 +472,9 @@ class CodexTaskRepository private constructor(context: Context) : Closeable {
             "item/started", "item/completed" -> handleStructuredItem(params)
             "item/agentMessage/delta" -> handleAgentDelta(params)
             "serverRequest/resolved" -> handleServerRequestResolved(params)
+            "account/rateLimits/updated" -> updateUsageRemainingPercent(
+                parseUsageRemainingPercent(params),
+            )
             "thread/archived", "thread/unarchived", "thread/closed", "thread/project/updated" ->
                 refreshRequests.tryEmit(Unit)
             "error" -> handleErrorNotification(params)
@@ -702,6 +724,12 @@ class CodexTaskRepository private constructor(context: Context) : Closeable {
         persistRequests.tryEmit(Unit)
     }
 
+    private fun updateUsageRemainingPercent(remainingPercent: Int?) {
+        _state.value = _state.value.copy(usageRemainingPercent = remainingPercent)
+        scope.launch { snapshotStore.replaceUsageRemainingPercent(remainingPercent) }
+        TileService.getUpdater(appContext).requestUpdate(SidekickTileService::class.java)
+    }
+
     private fun requireClient(): CodexRpcClient =
         client ?: throw CodexConnectionException("Codex is not connected")
 
@@ -724,6 +752,26 @@ class CodexTaskRepository private constructor(context: Context) : Closeable {
 }
 
 private data class ConnectionConfig(val serverUrl: String, val authToken: String)
+
+private fun parseUsageRemainingPercent(root: JSONObject): Int? {
+    val limits = root.optJSONObject("rateLimits") ?: root
+    val individual = limits.optJSONObject("individualLimit")
+    val individualRemaining =
+        when {
+            limits.optBoolean("spendControlReached", false) -> 0
+            individual?.has("remainingPercent") == true -> individual.optInt("remainingPercent")
+            else -> null
+        }
+    val usedPercents = listOfNotNull(
+        limits.optJSONObject("primary")?.usedPercentOrNull(),
+        limits.optJSONObject("secondary")?.usedPercentOrNull(),
+    )
+    val calculated = calculateUsageRemainingPercent(individualRemaining, usedPercents)
+    return calculated ?: if (!limits.isNull("rateLimitReachedType")) 0 else null
+}
+
+private fun JSONObject.usedPercentOrNull(): Int? =
+    if (has("usedPercent") && !isNull("usedPercent")) optInt("usedPercent") else null
 
 private fun buildTurnParams(taskId: String, input: String, model: String): JSONObject =
     JSONObject()

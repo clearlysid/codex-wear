@@ -12,16 +12,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +67,16 @@ fun TaskDetailScreen(
 
     val listState = rememberTransformingLazyColumnState()
     val transformationSpec = rememberTransformationSpec()
+    var hasPositionedAtLatest by remember(state.taskId) { mutableStateOf(false) }
+
+    LaunchedEffect(state.taskId, state.isLoading, state.timeline.size) {
+        if (!hasPositionedAtLatest && !state.isLoading && state.timeline.isNotEmpty()) {
+            // The header occupies index 0, so the final timeline item is one position later.
+            listState.scrollToItem(state.timeline.size)
+            hasPositionedAtLatest = true
+        }
+    }
+
     AppScaffold {
         ScreenScaffold(
             scrollState = listState,
@@ -118,7 +131,7 @@ fun TaskDetailScreen(
 
                 state.timeline.forEach { item ->
                     item(key = item.id, contentType = item::class.simpleName) {
-                        TimelineCard(
+                        TimelineItem(
                             item = item,
                             onApprove = { onApprove(item.id) },
                             onDecline = { onDecline(item.id) },
@@ -135,7 +148,7 @@ fun TaskDetailScreen(
 }
 
 @Composable
-private fun TimelineCard(
+private fun TimelineItem(
     item: TimelineItemUi,
     onApprove: () -> Unit,
     onDecline: () -> Unit,
@@ -144,61 +157,99 @@ private fun TimelineCard(
     modifier: Modifier,
     transformation: SurfaceTransformation,
 ) {
-    val colors =
-        when (item) {
-            is TimelineItemUi.UserMessage -> CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            is TimelineItemUi.Approval, is TimelineItemUi.Error -> CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            )
-            else -> CardDefaults.cardColors()
+    if (item is TimelineItemUi.UserMessage) {
+        Card(
+            onClick = {},
+            modifier = modifier,
+            transformation = transformation,
+            colors = CardDefaults.cardColors(
+                containerColor = UserMessageBackground,
+                contentColor = Color.White,
+            ),
+        ) {
+            if (item.text.isNotBlank()) Text(item.text, style = MaterialTheme.typography.bodySmall)
+            item.imageUrls.forEach { url ->
+                AsyncImage(
+                    model = url,
+                    contentDescription = "Attached image",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(92.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { onImageClick(url) },
+                )
+            }
         }
-    Card(
-        onClick = {},
-        enabled = false,
-        modifier = modifier,
-        transformation = transformation,
-        colors = colors,
+        return
+    }
+
+    Column(
+        modifier = modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         when (item) {
-            is TimelineItemUi.UserMessage -> {
-                Text("You", style = MaterialTheme.typography.labelSmall)
-                if (item.text.isNotBlank()) Text(item.text, style = MaterialTheme.typography.bodySmall)
-                item.imageUrls.forEach { url ->
-                    AsyncImage(
-                        model = url,
-                        contentDescription = "Attached image",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().height(92.dp)
-                            .clip(MaterialTheme.shapes.medium)
-                            .clickable { onImageClick(url) },
+            is TimelineItemUi.CodexMessage -> {
+                Text(item.text, style = MaterialTheme.typography.bodySmall)
+                if (item.isStreaming) CircularProgressIndicator(modifier = Modifier.size(12.dp))
+            }
+            is TimelineItemUi.ToolActivity -> {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        item.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (item.isRunning) CircularProgressIndicator(modifier = Modifier.size(10.dp))
+                }
+                item.summary?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyExtraSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                        maxLines = 3,
                     )
                 }
             }
-            is TimelineItemUi.CodexMessage -> {
-                Text("Codex", style = MaterialTheme.typography.labelSmall)
-                Text(item.text, style = MaterialTheme.typography.bodySmall)
-                if (item.isStreaming) CircularProgressIndicator(modifier = Modifier.size(14.dp))
-            }
-            is TimelineItemUi.ToolActivity -> {
-                TimelineHeading(Icons.Filled.Terminal, item.title)
-                item.summary?.let { Text(it, style = MaterialTheme.typography.bodyExtraSmall, maxLines = 3) }
-                if (item.isRunning) CircularProgressIndicator(modifier = Modifier.size(14.dp))
-            }
             is TimelineItemUi.FileChanges -> {
-                TimelineHeading(Icons.Filled.Description, "${item.files.size} file${if (item.files.size == 1) "" else "s"} changed")
-                item.summary?.let { Text(it, style = MaterialTheme.typography.bodyExtraSmall) }
+                Text(
+                    "${item.files.size} file${if (item.files.size == 1) "" else "s"} changed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                item.summary?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyExtraSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                    )
+                }
                 item.files.take(4).forEach { path ->
-                    Text(path, style = MaterialTheme.typography.bodyExtraSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        path,
+                        style = MaterialTheme.typography.bodyExtraSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
             is TimelineItemUi.Approval -> {
-                Text("Approval needed", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "Approval needed",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
                 Text(item.prompt, style = MaterialTheme.typography.bodySmall)
-                item.detail?.let { Text(it, style = MaterialTheme.typography.bodyExtraSmall, maxLines = 3) }
+                item.detail?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyExtraSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                    )
+                }
                 if (item.isResolving) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp))
                 } else if (item.canRespond) {
@@ -218,7 +269,7 @@ private fun TimelineCard(
                 }
             }
             is TimelineItemUi.Error -> {
-                TimelineHeading(Icons.Filled.Error, "Task error")
+                Text("Task error", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 Text(item.message, style = MaterialTheme.typography.bodySmall)
                 if (item.canRetry) {
                     FilledIconButton(onClick = onRetry, modifier = Modifier.align(Alignment.CenterHorizontally)) {
@@ -226,14 +277,9 @@ private fun TimelineCard(
                     }
                 }
             }
+            is TimelineItemUi.UserMessage -> Unit
         }
     }
 }
 
-@Composable
-private fun TimelineHeading(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-        Text(text, style = MaterialTheme.typography.labelSmall)
-    }
-}
+private val UserMessageBackground = Color(0xFF252528)

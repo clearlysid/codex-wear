@@ -6,8 +6,6 @@ import com.sidekick.watch.data.codex.CodexTaskSummary
 import java.time.Instant
 import java.time.ZoneId
 
-const val TASK_LOOKBACK_SECONDS = 7L * 24L * 60L * 60L
-const val ALL_TASKS_RECENT_LIMIT = 3
 const val HOME_ACTIVITY_LIMIT = 3
 const val HOME_TODAY_LIMIT = 3
 const val TILE_TASK_LIMIT = 2
@@ -16,17 +14,6 @@ const val RECENT_PROJECT_LIMIT = 5
 data class HomeTaskSections(
     val activity: List<CodexTaskSummary>,
     val today: List<CodexTaskSummary>,
-)
-
-data class ProjectTaskGroup(
-    /** Null is the explicit No project group. */
-    val project: CodexProject?,
-    val tasks: List<CodexTaskSummary>,
-)
-
-data class AllTasksOrganization(
-    val recent: List<CodexTaskSummary>,
-    val projectGroups: List<ProjectTaskGroup>,
 )
 
 enum class TileDisplayState {
@@ -75,49 +62,6 @@ fun organizeHomeTasks(
             .toList()
 
     return HomeTaskSections(activity = activity, today = today)
-}
-
-/**
- * Builds All Tasks from the rolling previous seven days. The top three Recent tasks are omitted
- * from the project groups so every task appears exactly once.
- */
-fun organizeAllTasks(
-    tasks: List<CodexTaskSummary>,
-    nowEpochSeconds: Long,
-    lookbackSeconds: Long = TASK_LOOKBACK_SECONDS,
-    recentLimit: Int = ALL_TASKS_RECENT_LIMIT,
-): AllTasksOrganization {
-    require(lookbackSeconds >= 0) { "lookbackSeconds must not be negative" }
-    require(recentLimit >= 0) { "recentLimit must not be negative" }
-
-    val cutoffEpochSeconds = nowEpochSeconds - lookbackSeconds
-    val eligible =
-        deduplicateTasks(tasks)
-            .filter { it.activityAtEpochSeconds >= cutoffEpochSeconds }
-            .sortedWith(newestTaskComparator)
-    val recent = eligible.take(recentLimit)
-    val recentIds = recent.asSequence().map(CodexTaskSummary::id).toHashSet()
-
-    val projectGroups =
-        eligible
-            .asSequence()
-            .filterNot { it.id in recentIds }
-            .groupBy { it.project?.id }
-            .values
-            .map { groupTasks ->
-                val sortedTasks = groupTasks.sortedWith(newestTaskComparator)
-                ProjectTaskGroup(
-                    project = sortedTasks.firstOrNull()?.project,
-                    tasks = sortedTasks,
-                )
-            }
-            .filter { it.tasks.isNotEmpty() }
-            .sortedWith(
-                compareByDescending<ProjectTaskGroup> { it.tasks.first().activityAtEpochSeconds }
-                    .thenBy { it.project?.id.orEmpty() },
-            )
-
-    return AllTasksOrganization(recent = recent, projectGroups = projectGroups)
 }
 
 /**
